@@ -1,30 +1,3 @@
-
-Skip to content
-
-    Pricing
-
-Sign in
-Sign up
-edgarcosta /
-hilbertmodularforms
-Public
-
-Code
-Issues 30
-Pull requests
-Actions
-Projects 4
-Security
-
-    Insights
-
-hilbertmodularforms/demoHMFDays.m
-@juanitaduquer
-juanitaduquer Igusa has a small test and is part of the demo
-Latest commit 2afb54d Feb 24, 2022
-History
-1 contributor
-99 lines (80 sloc) 2.68 KB
 // Demo file for HMF days
 load "config.m";
 
