@@ -1,3 +1,4 @@
+ModFrmHilX/*
 ModFrmHilD/*.sig
 *.sig
 *.swp
@@ -9,3 +10,4 @@ ModFrmHilD/.magma-scan/Space.m.el
 *.auto*
 ModFrmHil/spec~
 *.el
+*.ipynb

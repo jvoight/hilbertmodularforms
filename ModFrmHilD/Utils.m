@@ -1,5 +1,16 @@
+intrinsic QuadraticConjugate(elt::FldNumElt) -> FldNumElt
+ {}
+  return Trace(elt) - elt;
+end intrinsic;
+
+intrinsic CanonicalCyclicShift(s::SeqEnum[RngIntElt]) -> SeqEnum[RngIntElt]
+ { return the minimal lexicographic cyclic shift }
+ if #s eq 0 then return s; end if;
+ return Sort([s[k+1..#s] cat s[1..k] : k in [1..#s]])[1];
+end intrinsic;
+
 intrinsic Values(a::Assoc) -> List
-  {return the values of an associative array}
+  {Return the values of an associative array}
   return [* a[k] : k in Keys(a) *];
 end intrinsic;
 
@@ -8,9 +19,17 @@ intrinsic '+'(S::List, T::List) -> List
   return S cat T;
 end intrinsic;
 
+intrinsic Product(list::SeqEnum: empty:=1) -> Any
+  {Return the product of the elements of a list}
+  res := empty;
+  for x in list do
+    res *:= x;
+  end for;
+  return res;
+end intrinsic;
 
 intrinsic Product(list::List: empty:=1) -> Any
-  {return the product of the elements of a list}
+  {Return the product of the elements of a list}
   res := empty;
   for x in list do
     res *:= x;
@@ -19,7 +38,7 @@ intrinsic Product(list::List: empty:=1) -> Any
 end intrinsic;
 
 intrinsic Sum(list::List: empty:=0) -> Any
-  {return the sum of the elements of a list}
+  {Return the sum of the elements of a list}
   res := empty;
   for x in list do
     res +:= x;
@@ -28,12 +47,12 @@ intrinsic Sum(list::List: empty:=0) -> Any
 end intrinsic;
 
 intrinsic Sum(list::List, empty::Any) -> Any
-  {return the sum of the elements of a list}
+  {Return the sum of the elements of a list}
   return Sum(list: empty:=empty);
 end intrinsic;
 
 intrinsic 'eq'(a::Assoc, b::Assoc) -> BoolElt
-  {return if two associative arrays are equal}
+  {Return if two associative arrays are equal}
   if Universe(a) ne Universe(b) then
     return false;
   end if;
@@ -54,39 +73,39 @@ end intrinsic;
 
 
 intrinsic IsEvenAtoo(chi::GrpHeckeElt) -> BoolElt
-{return if the components of the Dirichlet restriction at the infinity places are all even}
+{Return if the components of the Dirichlet restriction at the infinity places are all even}
   F := NumberField(Ring(Domain(Parent(chi))));
   return &and[IsEven(c[v]) : v in InfinitePlaces(F)] where c:=Components(chi);
 end intrinsic;
 
 intrinsic IsOddAtoo(chi::GrpHeckeElt) -> BoolElt
-{return if the components of the Dirichlet restriction at the infinity places are all odd}
+{Return if the components of the Dirichlet restriction at the infinity places are all odd}
   F := NumberField(Ring(Domain(Parent(chi))));
   return &and[IsOdd(c[v]) : v in InfinitePlaces(F)] where c:=Components(chi);
 end intrinsic;
 
 intrinsic ElementToSequence(F::FldNum) -> SeqEnum[RngIntElt]
-  {return the sequence associated to the defining polynomial}
+  {Return the sequence associated to the defining polynomial}
     return ElementToSequence(DefiningPolynomial(F));
 end intrinsic;
 
 intrinsic ElementToSequence(I::RngOrdIdl) -> SeqEnum[RngIntElt]
-  {return the sequence associated to the defining polynomial}
+  {Return the sequence associated to the defining polynomial}
     return [ElementToSequence(g) : g in Generators(I)];
 end intrinsic;
 
 intrinsic ElementToSequence(SI::SetIndx[RngOrdIdl]) -> SeqEnum[SeqEnum[RngIntElt]]
-  {return the sequence associated to the defining polynomial}
+  {Return the sequence associated to the defining polynomial}
     return [ElementToSequence(elt) : elt in SI];
 end intrinsic;
 
 intrinsic ElementToSequence(SI::SetIndx[FldNumElt]) -> SeqEnum[SeqEnum[RngIntElt]]
-  {return the sequence associated to the defining polynomial}
+  {Return the sequence associated to the defining polynomial}
     return [ElementToSequence(elt) : elt in SI];
 end intrinsic;
 
 intrinsic ChangeRing(I::RngOrdIdl, m::Map) -> RngOrdIdl
-  {return the ideal over the codomain}
+  {Return the ideal over the codomain}
   return ideal<Integers(Codomain(m)) | [m(g): g in Generators(I)]>;
 end intrinsic;
 
@@ -157,4 +176,30 @@ intrinsic JoinString(list::SeqEnum[MonStgElt], sep::MonStgElt) -> MonStgElt
     s *:=sep*i;
   end for;
   return s;
+end intrinsic;
+
+// General convenience.
+
+intrinsic QuadraticFields(low::RngIntElt, high::RngIntElt : ExcludeBad:=false) -> SeqEnum
+{List all quadratic fields of discriminants between low and high.}
+    quadraticFields := Setseq({QuadraticField(D) : D in [low..4*high] | IsSquarefree(D)});
+    Sort(~quadraticFields, func<x,y | Discriminant(x) - Discriminant(y)>);
+    quadraticFields := [K : K in quadraticFields |
+                        Discriminant(K) le high and Discriminant(K) ge low];
+    return quadraticFields;
+end intrinsic;
+
+
+intrinsic WriteStderr(s::MonStgElt)
+{ write to stderr }
+  E := Open("/dev/stderr", "w");
+  Write(E, s);
+  Flush(E);
+end intrinsic;
+
+
+
+intrinsic WriteStderr(e::Err)
+{ write to stderr }
+  WriteStderr(Sprint(e) cat "\n");
 end intrinsic;
