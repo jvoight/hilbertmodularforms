@@ -79,17 +79,22 @@ function Slash(eta, k, M)
  	A := HMF(HMFSpace(M, k), CompleteCoeffsZeros(M, coeffs));
  	return A;
 end function;
+
 eta:=Integers(F)!(Integers(F).2+2);
+
 a1:=Slash(eta, [4,4], GR);
 b1:=Slash(eta, [6,6], GR);
+
 LinearDependence([a+a1] cat B4 : IdealClasses:=[1*ZF]);
 LinearDependence([b+b1] cat B6: IdealClasses:=[1*ZF]);
+
 assert LinearDependence([a+a1] cat B4 : IdealClasses:=[1*ZF])[3] eq [ 1, -1, -1, -2520/23, 0 ];
 assert LinearDependence([b+b1] cat B6: IdealClasses:=[1*ZF])[4] eq [ 1, -1, -1, 15007608/122713, 0, 7161/122713, 0 ];
+
+
 f:=a-a1;
 g:=b-b1;
 */
 
 // once we get the unit characters implemented, we want the following
 //assert LinearDependence([f*g] cat B10 : IdealClasses:=[1*ZF])[6] eq [ 1, 0, 0, -13218209762345280/15151705053833, 0, 365338373818355/90910230322998, 0, -17337475078945/4363691055503904, 0, 57065308895/52364292666046848, 0 ];
-Footer
