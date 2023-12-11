@@ -18,14 +18,24 @@ declare attributes ModFrmHilD:
   EisensteinBasis, // SeqEnum[ModFrmHilDElt]
   CuspFormBasis, // SeqEnum[ModFrmHilDElt]
   EllipticBasis, // SeqEnum[ModFrmHilDElt]
+  NewCuspFormBasis, // SeqEnum[ModFrmHilDElt] - basis for new cusp forms
+  OldCuspFormBasis, // SeqEnum[ModFrmHilDElt] - basis for old cusp forms
+  NewEisensteinBasis, // SeqEnum[ModFrmHilDElt] - basis for new Eisenstein series
+  OldEisensteinBasis, // SeqEnum[ModFrmHilDElt] - basis for old Eisenstein series
   Dimension, // RngIntElt
   CuspDimension, //RngIntElt
   EisensteinDimension, //RngIntElt
   EisensteinAdmissibleCharacterPairs, // List of pairs of primitive characters
   Ambient, // BoolElt
+  IsCuspidal, // BoolElt
+  IsNew, // BoolElt
   MagmaSpace, //ModFrmHil
   MagmaNewformDecomposition, // List
-  MagmaNewCuspForms; // SeqEnum[ModFrmHilElt]
+  MagmaNewCuspForms, // SeqEnum[ModFrmHilElt]
+  CoprimeClassGroupRepresentatives, // Assoc
+  TraceCorrectionFactorFlag, // boo
+  DefaultCoefficientRing; // FldNum
+
 
 
 ////////// ModFrmHilD fundamental intrinsics //////////
@@ -34,6 +44,9 @@ intrinsic Print(Mk::ModFrmHilD, level::MonStgElt)
   {}
   M := Parent(Mk);
   if level in ["Default", "Minimal", "Maximal"] then
+    if Mk`IsCuspidal then
+	printf "Cuspidal subspace of ";
+    end if;
     printf "Space of Hilbert modular forms over %o\n", BaseField(M);
     printf "Precision: %o\n", Precision(M);
     printf "Weight: %o\n", Weight(Mk);
@@ -87,6 +100,15 @@ intrinsic Character(Mk::ModFrmHilD) -> GrpHeckeElt
   return Mk`Character;
 end intrinsic;
 
+intrinsic IsCuspidal(Mk::ModFrmHilD) -> BoolElt
+{}
+  return Mk`IsCuspidal;
+end intrinsic;
+
+intrinsic IsNew(Mk::ModFrmHilD) -> BoolElt
+{}
+  return Mk`IsNew;
+end intrinsic;
 
 intrinsic UnitCharacters(Mk::ModFrmHilD) -> Assoc
   {}
@@ -108,12 +130,6 @@ end intrinsic;
 
 ////////// ModFrmHilD creation and multiplication functions //////////
 
-intrinsic ModFrmHilDInitialize() -> ModFrmHilD
-  {Create an empty ModFrmHilD object.}
-  M := New(ModFrmHilD);
-  return M;
-end intrinsic;
-
 intrinsic IsGamma1EisensteinWeight(chi::GrpHeckeElt, k::SeqEnum[RngIntElt]) -> BoolElt, RngIntElt
 {Check if the character chi is compatible with the weight k, i.e. the parity
 is the same at all infinite places. If it fails, returns the index of the first infinite
@@ -133,19 +149,53 @@ place where they do not match.}
 end intrinsic;
 
 intrinsic IsCompatibleWeight(chi::GrpHeckeElt, k::SeqEnum[RngIntElt]) -> BoolElt, RngQuadElt
-{Check if the character chi is compatible with the weight k, i.e. psi_0(e) = sign(e)^k for all units e. If it fails, returns a unit e where they do not match.}
+  {
+    input: 
+      chi: A ray class character chi
+      k: A weight k
+    returns:
+      true if chi is compatible with the weight k, i.e. psi(e) = sign(e)^k for all units e.
+
+      false, e if chi is incompatible with the weight k, where is an unit such that 
+        psi(e) != sign(e)^k. 
+
+      To elaborate, let K be the base field of chi and let m_fin and m_inf 
+      denote the finite and infinite parts of the modulus of chi.
+      The Dirichlet restriction of chi is the restriction of chi to the ray residue ring
+      K^m/K^(m,1), where K^m is the multiplicative group of elements of K coprime to the
+      finite part of the modulus of chi and K^(m,1) is the corresponding ray. 
+      A character of the ray residue ring is a product of a character on (O_K/m)*,
+      where O_K is the ring of integers of the field of definition of chi, and 
+      the product of sign(v(eps)) for every (infinite real) v in m_inf. 
+
+      For a fixed Hecke character chi, we denote the character on (O_K/m)* by psi.
+
+      Nebentypus characters arise as characters of Gamma_0(m, bb)/Gamma_1(m, bb),
+      i.e. of (O_K/m)*. If we consider the action of the matrix (e 0 \\ 0 e)
+      on a HMF, we obtain the compatibility condition that psi(e) = sign(e)^k. 
+  }
+
   comps := Components(chi);
   level, places := Modulus(chi);
-  F := NumberField(Order(level));
+   
+  F := NumberField(Order(level)); 
+  ZF := Integers(F);
   require places eq [1..Degree(F)] : "Chi is not a narrow class group character.";
   require (Degree(F) eq #InfinitePlaces(F)) : "The field is not totally real.";
+
+  // implementing the character psi which is described above
+  // as the product of the components of chi on the finite places
+  psi := function(x); // x is a FldNumElt
+    return (level eq 1*ZF) select 1 else &*[comps[v[1]](x) : v in Factorization(level)];
+  end function;
+
   U, mU := UnitGroup(F);
   for eps in Generators(U) do
       sign_eps := 1;
       for i->v in InfinitePlaces(F) do
 	  sign_eps *:= Sign(Evaluate(mU(eps),v))^k[i];
       end for;
-      if (chi(mU(eps)) ne sign_eps) then
+      if (psi(mU(eps)) ne sign_eps) then
 	  return false, mU(eps);
       end if;
   end for;
@@ -176,27 +226,29 @@ end intrinsic;
 intrinsic HMFSpace(M::ModFrmHilDGRng, N::RngOrdIdl, k::SeqEnum[RngIntElt], chi::GrpHeckeElt : unitcharacters:=false) -> ModFrmHilD
   {}
   spaces := Spaces(M);
+  F := BaseField(M);
   if unitcharacters cmpeq false then
     unitcharacters := AssociativeArray();
     for bb in NarrowClassGroupReps(M) do
-      unitcharacters[bb] := TrivialUnitCharacter(BaseField(M));
+      unitcharacters[bb] := WeightUnitCharacter(F, k);
     end for;
   end if;
 
   uc_values := &cat[ValuesOnGens(unitcharacters[bb]) : bb in NarrowClassGroupReps(M)];
-
   if IsDefined(spaces, N) then
     if IsDefined(spaces[N], <k, chi, uc_values>) then
       return spaces[N][<k, chi, uc_values>];
     end if;
   else
-    M`Spaces[N] := AssociativeArray();
+    M`Spaces[N] := AssociativeArray(PowerStructure(Tup));
   end if;
-  Mk := ModFrmHilDInitialize();
+  Mk := New(ModFrmHilD);
   Mk`Parent := M;
   Mk`Weight := k;
   Mk`Level := N;
   Mk`Ambient := true;
+  Mk`IsCuspidal := false;
+  Mk`IsNew := false;
   require Parent(chi) eq HeckeCharacterGroup(N, [1..Degree(BaseField(M))]) : "The parent of chi should be HeckeCharacterGroup(N, [1..Degree(BaseField(M))])";
   // Right now when k[i] = 1, we don't want to restrict to compatible weights.
   if 1 notin k then
@@ -206,10 +258,11 @@ intrinsic HMFSpace(M::ModFrmHilDGRng, N::RngOrdIdl, k::SeqEnum[RngIntElt], chi::
   end if;
   Mk`Character := chi;
   Mk`UnitCharacters := unitcharacters;
+  Mk`DefaultCoefficientRing := DefaultCoefficientRing(Mk);
   require Type(Mk`UnitCharacters) eq Assoc: "we expect the unitcharacters keyword to be an associative array";
   require Keys(Mk`UnitCharacters) eq SequenceToSet(NarrowClassGroupReps(M)) :"we expect the keys of the associative array to be narrow class group reprsentatives";
-  require {Type(v): v in Mk`UnitCharacters} eq { GrpCharUnitTotElt } : "we expect the values of the associative array to be of type GrpCharUnitTotElt";
-  require &and[BaseField(v) eq BaseField(M): v in Mk`UnitCharacters]: "we expect all the unit characters to have the same base field";
+  require {Type(v): k->v in Mk`UnitCharacters} eq { GrpCharUnitTotElt } : "we expect the values of the associative array to be of type GrpCharUnitTotElt";
+  require &and[BaseField(v) eq BaseField(M): k->v in Mk`UnitCharacters]: "we expect all the unit characters to have the same base field";
   M`Spaces[N][<k, chi, uc_values>] := Mk;
   return Mk;
 end intrinsic;
@@ -233,17 +286,6 @@ intrinsic HMFSpace(M::ModFrmHilDGRng, N::RngOrdIdl, k::SeqEnum[RngIntElt]: unitc
   return HMFSpace(M, N, k, chi: unitcharacters:=unitcharacters);
 end intrinsic;
 
-intrinsic ModFrmHilDCopy(Mk::ModFrmHilD) -> ModFrmHilD
-  {new instance of ModFrmHilD.}
-  M1k := ModFrmHilDInitialize();
-  for attr in GetAttributes(Type(Mk)) do
-    if assigned Mk``attr then
-      M1k``attr := Mk``attr;
-    end if;
-  end for;
-  return M1k;
-end intrinsic;
-
 // !! TODO - this currently only cuts out the magma space of newforms,
 // and throws out the Eisenstein series
 // and if there are other properties that we care about.
@@ -251,7 +293,7 @@ end intrinsic;
 intrinsic NewSubspace(M::ModFrmHilD, N::RngOrdIdl) -> ModFrmHilD
 {Returns the subspace of forms which are N-new.}
 
-  Mk := ModFrmHilDInitialize();
+  Mk := New(ModFrmHilD);
   Mk`Parent := M`Parent;
   Mk`Weight := M`Weight;
   Mk`Level := M`Level;
@@ -259,6 +301,8 @@ intrinsic NewSubspace(M::ModFrmHilD, N::RngOrdIdl) -> ModFrmHilD
   Mk`MagmaSpace := HeckeCharacterSubspace(NewSubspace(HilbertCuspForms(M), N), M`Character);
   Mk`EisensteinDimension := 0;
   Mk`Ambient := false;
+  Mk`IsCuspidal := true;
+  Mk`IsNew := true;
   return Mk;
 end intrinsic;
 
@@ -289,6 +333,19 @@ intrinsic '/'(M1::ModFrmHilD, M2::ModFrmHilD) ->ModFrmHilD
                     Level(M1),
                     [Weight(M1)[i] - Weight(M2)[i] : i in [1..#Weight(M1)] ],
                     Character(M1)/Character(M2)
+                    : unitcharacters:=unitcharacters);
+end intrinsic;
+
+intrinsic '^'(M::ModFrmHilD, n::RngIntElt) -> ModFrmHilD
+  {return M^n with the same level}
+  unitcharacters := AssociativeArray();
+  for bb in Keys(UnitCharacters(M)) do
+    unitcharacters[bb] := UnitCharacters(M)[bb]^n;
+  end for;
+  return HMFSpace(Parent(M),
+                    Level(M),
+                    [n * Weight(M)[i] : i in [1..#Weight(M)] ],
+                    Character(M)^n
                     : unitcharacters:=unitcharacters);
 end intrinsic;
 
@@ -358,13 +415,28 @@ end intrinsic;
 intrinsic CuspDimension(Mk::ModFrmHilD : version:="trace") -> RngIntElt
   {return dimension of S(Mk)}
   require version in ["builtin", "trace"] : "the options for trace are either \"builtin\" or \"trace formula\"";
+
+  // the trace formula does not currently support
+  // nonparallel weight
+  if not IsParallel(Weight(Mk)) then
+    version := "builtin";
+  end if;
+  
   // FIXME: Ben will fix this eventually...
   if not Mk`Ambient then
     version := "builtin";
   end if;
+
+  // TODO abhijitm remove once trace formula officially
+  // supports higher degree fields
+  if Degree(BaseField(Mk)) gt 2 then
+    version := "builtin";
+  end if;
+  /*
   if NarrowClassNumber(Parent(Mk)) ne 1 and not IsTrivial(Character(Mk)) then
     version := "builtin";
   end if;
+  */
   if not assigned Mk`CuspDimension then
     k := Weight(Mk);
     if version eq "builtin" then
@@ -373,11 +445,7 @@ intrinsic CuspDimension(Mk::ModFrmHilD : version:="trace") -> RngIntElt
     else
       M := Parent(Mk);
       ZF := Integers(M);
-      // Edgar: Ben, should one use Strace?
       Mk`CuspDimension := Integers()!Trace(Mk,1*ZF);
-      if SequenceToSet(k) eq Set([2]) then
-        Mk`CuspDimension -:= NarrowClassNumber(M);
-      end if;
     end if;
   end if;
   return Mk`CuspDimension;
@@ -386,101 +454,173 @@ end intrinsic;
 intrinsic EisensteinDimension(Mk::ModFrmHilD) -> RngIntElt
   {return the dimension of E(Mk)}
   if not assigned Mk`EisensteinDimension then
+    new_eisenstein_dim := NewEisensteinDimension(Mk);
+
+    M := Parent(Mk);
     N := Level(Mk);
-    newforms_levels := AssociativeArray();
-    for pair in EisensteinAdmissibleCharacterPairs(Mk) do
-      lvl := Conductor(pair[1]) * Conductor(pair[2]);
-      if not IsDefined(newforms_levels, lvl) then
-        newforms_levels[lvl] := 0;
-      end if;
-      newforms_levels[lvl] +:= EulerPhi(LCM([Order(e) : e in pair]));
+    k := Weight(Mk);
+    chi := Character(Mk);
+
+    old_eisenstein_dim := 0;
+    divisors := [D : D in Divisors(N) | (D ne N) and (D subset Conductor(chi))];
+    for D in divisors do
+      chi_D := Restrict(chi, D, [1,2]);
+      Mk_D := HMFSpace(M, D, k, chi_D);
+      old_eisenstein_dim +:= #Divisors(N/D) * NewEisensteinDimension(Mk_D);
     end for;
-    Mk`EisensteinDimension := &+[Integers()| #Divisors(N/mm)*rel_dim : mm->rel_dim in newforms_levels];
+
+    Mk`EisensteinDimension := new_eisenstein_dim + old_eisenstein_dim;
   end if;
   return Mk`EisensteinDimension;
 end intrinsic;
 
-// copy pasted from ModSym/dirichlet.m
-intrinsic GaloisConjugacyRepresentatives(S::[GrpHeckeElt]) -> SeqEnum
-{Representatives for the Gal(Qbar/Q)-conjugacy classes of Dirichlet characters 
- contained in the given sequence S}  
-   
-   G := Universe(S);
-
-if #S eq 0 then
-//   or Type(BaseRing(G)) eq FldRat then 
-     return S;
-   end if;
-
-  // require ISA(Type(BaseRing(G)), FldAlg) :
-    //      "The base ring of argument 1 must be a number field.";
-
-   n := Exponent(AbelianGroup(G));     
-if n eq 1 then return S; end if;
-   i := 1;
-   U := [k : k in [1..n-1] | GCD(k,n) eq 1]; // Steve changed this, was [2..n-1]
-   while i lt #S do
-      x := S[i];
-      for m in U do
-         y := x^m;
-         R := [j : j in [i+1..#S] | S[j]`Element eq y`Element];
-         for j in Reverse(R) do    // important to reverse.
-            Remove(~S,j);
-         end for;
-      end for;
-      i +:= 1;
-   end while;
-   return S;
+intrinsic NewEisensteinDimension(Mk::ModFrmHilD) -> RngIntElt
+  {returns the dimension of the space of new Eisenstein series of Mk}
+  new_eisenstein_dim_scaled := 0;
+  for pair in EisensteinAdmissibleCharacterPairs(Mk) do
+    new_eisenstein_dim_scaled +:= EulerPhi(LCM([Order(e) : e in pair]));
+  end for;
+  new_eisenstein_dim := ExactQuotient(new_eisenstein_dim_scaled, EulerPhi(Order(Character(Mk))));
+  return new_eisenstein_dim;
 end intrinsic;
 
-intrinsic EisensteinAdmissibleCharacterPairs(Mk::ModFrmHilD) -> SeqEnum
-  {returns a list of all the primitive pairs <chi1, chi2> such that
-  chi1*chi2 = Character(Mk) and Conductor(chi1)*Conductor(chi2) | Level(Mk)
-  If the weight is 1, we only return pairs up to permutation}
-  if not assigned Mk`EisensteinAdmissibleCharacterPairs then
-    N := Level(Mk);
-    k := Weight(Mk);
-    if #SequenceToSet(k) ne 1 then
-      // there are no Eisenstein series in nonparallel weight
-      Mk`EisensteinAdmissibleCharacterPairs := [* *];
-      return Mk`EisensteinAdmissibleCharacterPairs;
-    end if;
-    k := k[1];
-    chi := Character(Mk);
-    M := Parent(Mk);
-    X := HeckeCharacterGroup(N, [1..Degree(BaseField(M))]);
-    assert X eq Parent(chi);
-    chis := Elements(X);
-    chis_reps := Set(GaloisConjugacyRepresentatives(chis));
-    chis_reps_index := {i : i->c in chis | c in chis_reps};
-    chiscond := [Conductor(c) : c in chis];
-    chisdict := AssociativeArray();
-    for i->c in chis do
-      chisdict[c] := i;
+// Coprime class group representatives
+intrinsic CoprimeClassGroupRepresentatives(Mk::ModFrmHilD) -> Assoc
+  {Returns an associative array which converts the standard class group representatives (stored as aa in ClassGroupReps(F))
+  to class group representatives bb that are coprime to NN i.e. H[aa] = bb where [aa] = [bb] in Cl(F) and (bb,NN) = 1.}
+  if not assigned Mk`CoprimeClassGroupRepresentatives then
+    NN := Level(Mk);
+    F := BaseField(Mk);
+    ZF := Integers(F);
+    C := ClassGroupReps(F); // class group representatives
+    H := AssociativeArray(); // Hash: Standard class group representative { aa } -> Class group representatives coprime to NN { bb }
+    for aa in C do 
+      q := CoprimeRepresentative(aa,NN);
+      bb := ideal < ZF | q * aa >;
+      H[aa] := bb;
     end for;
-    // [i, j] pairs st chis[i]*chis[j] = chi
-    pairs := [ [i, chisdict[chi*c^-1]] : i->c in chis | i in chis_reps_index ];
-    // filter based on conductor
-    pairs := [ p : p in pairs | N subset chiscond[p[1]] * chiscond[p[2]] ];
-    if k eq 1 then
-      // only keep one of the pairs [i, j], [j, i]
-      // we E(chi, psi) = E(psi, chi)
-      newpairs := [];
-      for k0->p in pairs do
-	i, j := Explode(p);
-	// this might be zero, as we forced i to be galois representative 
-        k1 := Index(pairs, [j, i]);
-        if k1 le k0 then // nonetheless, k0 > 0
-          Append(~newpairs, p);
-        end if;
-      end for;
-      pairs := newpairs;
-    end if;
-    prims := AssociativeArray();
-    for i in SequenceToSet(&cat pairs) do
-      prims[i] := AssociatedPrimitiveCharacter(chis[i]);
-    end for;
-    Mk`EisensteinAdmissibleCharacterPairs := [* <prims[p[1]], prims[p[2]]> : p in pairs *];
+    Mk`CoprimeClassGroupRepresentatives := H;
   end if;
-  return Mk`EisensteinAdmissibleCharacterPairs;
+  return Mk`CoprimeClassGroupRepresentatives;
+end intrinsic;
+
+
+// Trace flag for correction factor
+intrinsic TraceCorrectionFactorFlag(Mk::ModFrmHilD) -> Assoc
+  {Checks if Mk has parallel weight 2 and if the character chi factors through the map a -> a^2 from Cl(F) -> Cl+(F) }
+  if not assigned Mk`TraceCorrectionFactorFlag then
+    
+    // Initialize
+    k := Weight(Mk);
+    chi := Character(Mk);
+    F := BaseField(Mk);
+    H := CoprimeClassGroupRepresentatives(Mk);
+    C := [ H[aa] : aa in ClassGroupReps(F) ];
+    ker := [ i : i in C | IsNarrowlyPrincipal(i^2) ]; // kernel of map a |-> a^2 from Cl(F) -> Cl+(F)
+    
+    /* Requirements
+    (a) k = (2,...,2) is parallel weight 2
+    (b) chi factors through the homomorphism C -> NC given by a |-> a^2. */
+    
+    // Check Requirements
+    a := Set(k) eq {2}; 
+    b := {chi(a) : a in ker} eq {1}; 
+    Mk`TraceCorrectionFactorFlag := a and b;
+  end if;
+  return Mk`TraceCorrectionFactorFlag;
+end intrinsic;
+
+// I found it useful to have this function when we want to restrict to cuspidal subspaces
+
+intrinsic CuspidalSubspace(M::ModFrmHilD) -> ModFrmHilD
+{The cuspidal subspace of M.}
+
+  Mk := New(ModFrmHilD);
+  Mk`Parent := M`Parent;
+  Mk`Weight := M`Weight;
+  Mk`Level := M`Level;
+  Mk`Character := M`Character;
+  Mk`MagmaSpace := HeckeCharacterSubspace(HilbertCuspForms(M), M`Character);
+  Mk`EisensteinDimension := 0;
+  Mk`Ambient := false;
+  Mk`UnitCharacters := M`UnitCharacters;
+  Mk`IsCuspidal := true;
+  Mk`IsNew := false;
+  return Mk;  
+end intrinsic;
+
+intrinsic IsParitious(k::SeqEnum[RngIntElt]) -> BoolElt
+  {
+    input: 
+      k: The weight of the HMF
+    returns:
+      true when k is paritious (all components have the same parity)
+      false otherwise
+  }
+  k_1 := k[1];
+  return &and[((k_i - k[1]) mod 2 eq 0) : k_i in k];
+end intrinsic;
+
+intrinsic IsParallel(k::SeqEnum[RngIntElt]) -> BoolElt
+  {
+      true when k is parallel (all components are equal)
+      false otherwise
+  }
+  return #SequenceToSet(k) eq 1;
+end intrinsic;
+
+intrinsic DefaultCoefficientRing(Mk::ModFrmHilD) -> FldNum
+  {
+    input:
+      Mk: A space of HMFs
+    returns:
+      The smallest extension
+      that the Fourier coefficients of a form with this weight
+      and character can live in. 
+
+      In parallel weight, this is Q.
+
+      In nonparallel paritious weight, this is
+      the compositum of the splitting field of F 
+      and the nebentypus field (the cyclotomic field 
+      Q(zeta_d) where d the order of the nebentypus).
+
+      (TODO abhijitm we can do a little bit better
+      than this by replacing Spl(F) by what Shimura calls
+      Phi \subseteq Spl(F). For quadratic fields
+      Phi = Spl(F) in nonparallel paritious weight).
+
+            
+      If k is non-paritious, we return the compositum
+      of the splitting field of F and 
+      the field generated by the polynomials 
+      x^2-eps_i for [eps_1, .., eps_(n-1)]
+      a set of generators for the group of totally positive 
+      units of F. 
+
+      (TODO abhijitm this should change if/when
+       the normalization of the Hecke operator is changed)
+
+      We set this as a default for the entire space 
+      to avoid any sort of compatibility/coercion
+      issues when doing arithmetic with different forms.
+      As of this writing (10/2023), every method we have
+      of creating forms chooses coefficients lying in 
+      the DefaultCoefficientRing.
+
+      If you want to do something more, you can choose a custom
+      coefficient ring in the HMF constructor.
+  }
+
+  if assigned Mk`DefaultCoefficientRing then
+    return Mk`DefaultCoefficientRing;
+  end if;
+
+  UnitCharField := UnitCharField(BaseField(Mk), Weight(Mk));
+  // TODO abhijitm is there an advantage to not just using RationalsAsNumberField()
+  // by default throughout this codebase rather than having to waffle?
+  d := Order(Mk`Character);
+  NebCharField := (d le 2) select Rationals() else CyclotomicField(Order(Mk`Character));
+  Mk`DefaultCoefficientRing := Compositum(NebCharField, UnitCharField);
+  return Mk`DefaultCoefficientRing;
 end intrinsic;

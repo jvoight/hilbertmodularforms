@@ -1,12 +1,12 @@
 printf "Testing squaring of weight one forms...";
 F:=QuadraticField(5);
-prec:=10;
+prec:=125;
 M:=GradedRingOfHMFs(F, prec);
 ZF:=Integers(F);
 N:= 23*ZF;
 H := HeckeCharacterGroup(N, [1,2]);
 chi := (H.1^11);
 Mchi := HMFSpace(M, N, [1,1], chi);
-B := Weight1CuspBasis(Mchi : prove := false);
+B := HeckeStabilityCuspBasis(Mchi : prove := false);
 f := B[1];
 g := f^2;

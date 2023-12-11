@@ -1,33 +1,35 @@
 {
   Basis.m
+  Components.m
+  CongruenceSubgroup.m
   CuspResolution.m
   Cusps.m
   Elements.m
   EllipticPoints.m
+  Export.m
   FldExt.m
   Formatting.m
+  IdlCoeffEltCoeffConversion.m
   GradedPoly.m
   GradedRing.m
   HJ-CFrac.m
   HZCuspIntersection.m
+  HZDivisors.m
   Hecke.m
   Labels.m
   LinearAlgebra.m
+  PositiveUnitReps.m
   RationalFunctionsTools.m
   Restriction.m
+  SaveAndLoad.m
   Space.m
   SurfaceInvariants.m
   Trace.m
   UnitChar.m
   Utils.m
+  VDGTable.m
   Verbose.m
   Workspace.m
-}
-
-Multiplication
-{
-   Multiplication.m
-   Shintani.m
 }
 
 Creation
@@ -49,5 +51,5 @@ CanonicalRing
   CanonicalRing.m
   HilbertSeries.m
   IntersectionRing.m
-  CongruenceSubgroup.m
+  IO.m
 }

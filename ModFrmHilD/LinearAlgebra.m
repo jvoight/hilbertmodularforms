@@ -1,11 +1,29 @@
 // Generic Linear algebra
-intrinsic PivotColumns(A::Mtrx: is_echelonized:=false) -> SeqEnum[RngIntElt]
+intrinsic PivotColumns(A::Mtrx: is_echelonized:=false, rank:=false) -> SeqEnum[RngIntElt]
   {Return the pivot column positions of the matrix A}
-  if not is_echelonized then
+  if Type(BaseRing(A)) in [RngInt, FldRat] then
+    if rank cmpeq false then
+      rank := Rank(A);
+    end if;
+    d := Denominator(A);
+    AZ := Matrix(Integers(), d*A);
+    p := 1;
+    while true do
+      p := NextPrime(p);
+      if d mod p ne 0 then
+        Ap := Matrix(GF(p), AZ);
+        if Rank(Ap) eq rank then
+          return $$(Ap : rank:=rank);
+        end if;
+      end if;
+    end while;
+  elif not is_echelonized then
     A := EchelonForm(A);
   end if;
-  r := Rank(A);
-  return Sort(SetToSequence({ PivotColumn(A, i) : i in [1..r] }));
+  if rank cmpeq false then
+    rank := Rank(A);
+  end if;
+  return Sort(SetToSequence({ PivotColumn(A, i) : i in [1..rank] }));
 end intrinsic;
 
 intrinsic PivotRows(A::Mtrx) -> SeqEnum[RngIntElt]
@@ -31,20 +49,22 @@ intrinsic CoefficientsMatrix(list::SeqEnum[ModFrmHilDElt] : IdealClasses:=false,
   else
     bbs := IdealClasses;
   end if;
-  require #bbs gt 0: "at least on ideal class must be specified";
+  require #bbs gt 0: "at least one ideal class must be specified";
+  // make it a SeqEnum
+  bbs := [bb : bb in bbs];
 
   if prec cmpeq false then
     prec := Min([Precision(Components(f)[bb]): f in list, bb in bbs]);
   end if;
 
-  mat := Matrix([
-    &cat[
-      &cat[Eltseq(Coefficients(Components(f)[bb])[nu]) : nu in ShintaniRepsUpToTrace(M, bb, prec)]
-      : bb in bbs]
-    : f in list]);
-  nus := &cat[ShintaniRepsUpToTrace(M, bb, prec) : bb in bbs];
-  return mat, nus;
+  nus := [FunDomainRepsUpToNorm(M)[bb][prec] : bb in bbs];
+
+  mat := Matrix([&cat[[Coefficient(Components(f)[bb], nu) : nu in nus[i]] : i->bb in bbs] : f in list]);
+  assert Ncols(mat) eq &+[#elt : elt in nus];
+  assert Nrows(mat) eq #list;
+  return mat, nus, bbs;
 end intrinsic;
+
 
 intrinsic ShortLinearDependence(M::Mtrx) -> SeqEnum[RngIntElt]
   {
@@ -52,9 +72,21 @@ intrinsic ShortLinearDependence(M::Mtrx) -> SeqEnum[RngIntElt]
     If none can be found return 0.
   }
   // in case M is defined over the rationals
-  M := ChangeRing(Denominator(M)*M, Integers());
+  if CanChangeRing(M, Rationals()) then
+    M := ChangeRing(Denominator(M)*M, Integers());
+  end if;
+  
   B := Basis(Kernel(M));
-  if #B ne 0 then return [Eltseq(i) : i in Rows(Matrix(LLL(B)))]; else return []; end if;
+
+  if #B eq 0 then
+    return [];
+  elif CanChangeRing(M, Rationals()) then
+    kernel_basis_vectors := Rows(Matrix(LLL(B)));
+  else 
+    kernel_basis_vectors := B;
+  end if;
+  // return a SeqEnum of SeqEnums instead of a SeqEnum of vectors
+  return [Eltseq(v) : v in kernel_basis_vectors];
 end intrinsic;
 
 
@@ -77,6 +109,18 @@ intrinsic LinearDependence(list::SeqEnum[ModFrmHilDElt] : IdealClasses:=false, p
 end intrinsic;
 
 
+intrinsic Basis(generators::SeqEnum[ModFrmHilDElt]) -> SeqEnum[ModFrmHilDElt]
+  {returns Basis for the vector space spanned by the inputted forms}
+  if #generators eq 0 then return generators; end if;
+  C, nus, bbs := CoefficientsMatrix(generators);
+  E := EchelonForm(C);
+  r := Rank(E);
+  Mk := Parent(generators[1]);
+  return [Mk | HMF(Mk, Eltseq(row), nus, bbs) : row in Rows(E)[1..r] ];
+end intrinsic;
+
+
+
 
 intrinsic ComplementBasis(
   Wbasis::SeqEnum[ModFrmHilDElt],
@@ -86,6 +130,11 @@ intrinsic ComplementBasis(
   )-> SeqEnum[ModFrmHilDElt]
   {Given bases for spaces W < V, return a basis for the complement of W in V}
 
+  if #Wbasis eq 0 then return Vbasis; end if;
+  require Parent(Wbasis[1]) eq Parent(Vbasis[1]) : "Forms not in the same space";
+  Mk := Parent(Wbasis[1]);
+  R := CoefficientRing(Wbasis[1]);
+  require &and[R eq CoefficientRing(elt) : elt in Vbasis cat Wbasis] : "we expect the forms to have the same coefficient ring";
   VCoeffMatrix, nus1 := CoefficientsMatrix(Vbasis);
   WCoeffMatrix, nus2 := CoefficientsMatrix(Wbasis);
   assert nus1 eq nus2;
@@ -134,19 +183,19 @@ intrinsic ComplementBasis(
 
   WComplementBasis := WExtendedCoeffBasis[Dimension(W) + 1..Dimension(V)];
   sol := Solution(VCoeffMatrix, WComplementBasis);
-  return [ &+[elt[i]*Vbasis[i] : i in [1..#Vbasis]] : elt in sol];
+  return [Mk |  &+[elt[i]*Vbasis[i] : i in [1..#Vbasis]] : elt in sol];
 end intrinsic;
 
 intrinsic ComplementBasis(Wbasis::SeqEnum[ModFrmHilDElt] : Alg := "WeightedLLL"
   )-> SeqEnum[ModFrmHilDElt]
-  {Given bases for a space W contained within a space `V` of Hilbert Modular Surfaces, 
+  {Given bases for a space W contained within a space `V` of Hilbert Modular Surfaces,
   (i.e., `V := Parent(Wbasis[1])`), return a basis for the complement of W in V}
   return ComplementBasis(Wbasis, Parent(Wbasis[1]) : Alg:=Alg);
 end intrinsic;
 
 intrinsic ComplementBasis(Wbasis::SeqEnum[ModFrmHilDElt], V::ModFrmHilD : Alg := "WeightedLLL"
   )-> SeqEnum[ModFrmHilDElt]
-  {Given bases for a space W contained within a space `V` of Hilbert Modular Surfaces, 
+  {Given bases for a space W contained within a space `V` of Hilbert Modular Surfaces,
   return a basis for the complement of W in V}
   return ComplementBasis(Wbasis, Basis(V) : Alg:=Alg);
 end intrinsic;

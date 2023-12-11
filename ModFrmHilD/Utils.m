@@ -1,3 +1,5 @@
+
+
 intrinsic QuadraticConjugate(elt::FldNumElt) -> FldNumElt
  {}
   return Trace(elt) - elt;
@@ -122,6 +124,26 @@ intrinsic ReadRecords(filename::MonStgElt : Delimiter:=":") -> SeqEnum
     return [Split(r,Delimiter):r in Split(Read(filename))];
 end intrinsic;
 
+intrinsic ReadData(filename::MonStgElt : Delimiter := ":") -> Any
+  {}
+  data := [];
+  RE := "^[0-9]+.[0-9]+.[0-9]+.[0-9]+";
+  file := Open(filename, "r");
+    while true do
+      line := Gets(file);
+      if IsEof(line) then
+        break;
+      end if;
+      //if not "-" in line then
+      if not Regexp(RE,line) then
+        continue;
+      end if;
+      label, k, invs := Explode(Split(line, Delimiter));
+      invs := eval invs;
+      Append(~data, [* label, invs *]);
+    end while;
+    return data;
+end intrinsic;
 
 intrinsic WriteRecords(filename::MonStgElt, S::SeqEnum[SeqEnum[MonStgElt]]) -> RngIntElt
 {Given a list of lists of strings, create a colon delimited file with one list per line, return number of records written. }
@@ -192,7 +214,7 @@ end intrinsic;
 
 intrinsic WriteStderr(s::MonStgElt)
 { write to stderr }
-  E := Open("/dev/stderr", "w");
+  E := Open("/dev/stderr", "a");
   Write(E, s);
   Flush(E);
 end intrinsic;
@@ -202,4 +224,36 @@ end intrinsic;
 intrinsic WriteStderr(e::Err)
 { write to stderr }
   WriteStderr(Sprint(e) cat "\n");
+end intrinsic;
+
+// Iterated compositums
+
+intrinsic Compositum(A::List) -> FldNum
+  {
+    input: 
+      A: A list of number fields
+    returns:
+      The compositum of all the number fields.
+  }
+  K := A[1];
+  for i in [2 .. #A] do
+    K := Compositum(K, A[i]);
+  end for;
+  return K;
+end intrinsic;
+
+// Copy object
+
+intrinsic Copy(obj::.) -> Any
+  {
+    returns a copy of obj
+  }
+  obj_type := Type(obj);
+  obj_copy := New(obj_type);
+  for attr in GetAttributes(obj_type) do
+    if assigned obj``attr then
+      obj_copy``attr := obj``attr;
+    end if;
+  end for;
+  return obj_copy;
 end intrinsic;

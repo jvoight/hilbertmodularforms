@@ -46,7 +46,7 @@ end function;
 procedure TestGeneratorsOfGMV()
     F := RandomField();
     M := RandomFracIdl(F);
-    w := FundamentalUnitTotPos(F);
+    w := TotallyPositiveUnitsGenerators(F)[1];
     V := w^(Random([1..10]));
     gs := GeneratorsOfGMV(M, V);
     for i:=1 to 3 do
@@ -93,7 +93,7 @@ procedure TestCuspResolutionMV()
     I := alpha*ZF + beta*b^(-1);
     assert IsNormalizedCuspChangeMatrix(b, n, g);
     
-    GammaType := Random(["Gamma0", "Gamma1", "Gamma"]);
+    GammaType := Random(["Gamma0", "Gamma"]); //"Gamma1": we need a squarefree level if GL2+
     GroupType := Random(["GL2+", "SL2"]);
     M, V, g := CuspResolutionMV(b, n, alpha, beta:
                                 GammaType := GammaType, GroupType := GroupType);

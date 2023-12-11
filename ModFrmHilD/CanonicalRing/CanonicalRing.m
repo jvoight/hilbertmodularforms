@@ -181,7 +181,7 @@ intrinsic ConstructGeneratorsAndRelations(
   LowestWeight:=2,
   Alg:="Standard",
   IdealClassesSupport:=false,
-  GaloisInvariant:=false,
+  Symmetric:=false,
   ComputeNewGenerators:=true,
   PrecomputedGens:=AssociativeArray()
   ) -> Any
@@ -194,7 +194,7 @@ intrinsic ConstructGeneratorsAndRelations(
   'LowestWeight'         :  Specifiy the lowest weight for the generators.
   'Alg'                  :  passed to ComplementBasis.
   'IdealClassesSupport'  :  Restrict the support of the generators to a given set of components.
-  'GaloisInvariant'      :  Restrict the generators to be Galois invariant, i.e., invariant under the swap map.
+  'Symmetric'      :  Restrict the generators to be invariant under the automorphisms of the base field F, i.e., invariant under the swap map.
   'PrecomputedGens'      :  An AssociativeArray to provide precomputed generators.
                             It is presumed that PrecomputedGens[k] contains all generators of weight `k`.
 
@@ -213,7 +213,7 @@ intrinsic ConstructGeneratorsAndRelations(
   n := Degree(BaseField(M));
   CoeffCount := NumberOfCoefficients(M);
 
-  have_dim_formula := IdealClassesSupport eq NarrowClassGroupReps(M) and not GaloisInvariant;
+  have_dim_formula := IdealClassesSupport eq NarrowClassGroupReps(M) and not Symmetric;
   KnownRelations := false;
 
   /////////////////////
@@ -229,7 +229,7 @@ intrinsic ConstructGeneratorsAndRelations(
       basis := PrecomputedGens[minimalGenWeight];
 
   elif ComputeNewGenerators then
-      basis := Basis(HMFSpace(M, N, [minimalGenWeight : i in [1..n]]));
+      basis := Basis(HMFSpace(M, N, [minimalGenWeight : i in [1..n]]) : IdealClassesSupport := IdealClassesSupport, Symmetric:=Symmetric);
       assert not IsNull(basis);
   else
       msg := "No generators of parallel weight 2 found. Functionality for non-parallel weight "*
@@ -253,7 +253,7 @@ intrinsic ConstructGeneratorsAndRelations(
 
   /*   elif ComputeNewGenerators then // Can't this be improved using the dimension formula, when available? */
   /*     Mk := HMFSpace(M, N, [k : i in [1..n]]); */
-  /*     Bk := Basis(Mk : IdealClassesSupport:=IdealClassesSupport, GaloisInvariant:=GaloisInvariant); */
+  /*     Bk := Basis(Mk : IdealClassesSupport:=IdealClassesSupport, Symmetric:=Symmetric); */
 
   /*     if not IsNull(Bk) then */
   /*         Gens[k] := Bk; */
@@ -319,7 +319,7 @@ intrinsic ConstructGeneratorsAndRelations(
                                   Alg := Alg,
                                   KnownMkDimension := knownDim,
                                   IdealClassesSupport := IdealClassesSupport,
-                                  GaloisInvariant := GaloisInvariant);
+                                  Symmetric := Symmetric);
 
       newGens := basisWeightk[#weightedSymBasis + 1 .. #basisWeightk];
 
@@ -349,7 +349,7 @@ intrinsic ExtendBasis(forms::SeqEnum[ModFrmHilDElt], Mk :
                       Alg                 := "Standard",
                       KnownMkDimension    := false,
                       IdealClassesSupport := false,
-                      GaloisInvariant     := false) -> SeqEnum
+                      Symmetric     := false) -> SeqEnum
 {Given a sequence Q of r linearly independent elements of a space M and a subspace V of M
 containing the elements of Q, extend the elements of Q to a basis for U; the basis is
 returned in the form of a sequence T such that T[i] = Q[i] for i in [ 1 .. r ].
@@ -361,18 +361,18 @@ It is assumed that `forms` are linearly independent.}
     elif KnownMkDimension cmpne false and KnownMkDimension ne #forms then
         // First try our luck with just Eisenstein series. If that fails, use the fallback.
 
-        eisensteinbasis := EisensteinBasis(Mk : IdealClassesSupport:=IdealClassesSupport, GaloisInvariant:=GaloisInvariant);
-        moreforms := forms cat eisensteinbasis;
+        eisensteinbasis := EisensteinBasis(Mk : IdealClassesSupport:=IdealClassesSupport, Symmetric:=Symmetric);
+        moreforms := Basis(forms cat eisensteinbasis);
         coeffs_matrix := CoefficientsMatrix(moreforms : IdealClasses:=IdealClassesSupport);
 
         // TODO: This double complement call can surely be optimized away.
         if Rank(coeffs_matrix) eq KnownMkDimension then
-            return forms cat ComplementBasis(forms, moreforms : Alg := Alg);
+            return forms cat ComplementBasis(forms, Basis(moreforms) : Alg := Alg);
         end if;
     end if;
 
     // Apply the fallback strategy.
-    Basisweightk := Basis(Mk : IdealClassesSupport:=IdealClassesSupport, GaloisInvariant:=GaloisInvariant);
+    Basisweightk := Basis(Mk : IdealClassesSupport:=IdealClassesSupport, Symmetric:=Symmetric);
     return forms cat ComplementBasis(forms, Basisweightk: Alg := Alg);
 end intrinsic;
 
@@ -653,30 +653,42 @@ end function;
 //
 /////////////////////////////////////////////////////
 
+// Given a number field F, a level NN, and a bound B on the weight of the generators, return the precision (number of coefficients) required to do linear algebra
+intrinsic ComputePrecisionFromHilbertSeries(NN::RngOrdIdl, B::RngIntElt) -> RngIntElt
+  {Compute the number of q-expansion coefficients needed from the coefficients of the Hilbert series}
+  F := NumberField(Order(NN));
+  H := HilbertSeries(F,NN);
+  Pow<T> := PowerSeriesRing(Rationals());
+  return 10*Integers()!Coefficient(Pow!H, B) + 10;
+end intrinsic;
+
 intrinsic HilbertModularVariety(F::FldNum, N::RngOrdIdl, MaxGeneratorWeight::RngIntElt, MaxRelationWeight::RngIntElt
 				: Precision := 100,
 				  LowestWeight:=2,
 				  Alg:="Standard",
 				  IdealClassesSupport:=false,
-				  GaloisInvariant:=false,
+				  Symmetric:=false,
 				  ComputeNewGenerators:=true,
 				  PrecomputedGens:=AssociativeArray()) -> Srfc
-{
-  Compute a model for the (canonical ring of the) Hilbert modular sXurface over F of level N.
+{ Compute a model for the (canonical ring of the) Hilbert modular surface over F of level N.
   Generators will have parallel weight upto MaxWeightGens, and relations will have parallel upto MaxWeightRelations.
   Return a three Associative arrays, indexed by weight, corresponding to generators, relations and the monomials.
   Use the optional parameter 'LowestWeight' to specifiy the lowest weight for the generators.
   The optional parameter 'Alg' is passed to ComplementBasis.
   Use the optional parameter 'IdealClassesSupport' to restrict the support of the generators to a given set of components.
-  Use the optional parameter 'GaloisInvariant' to restrict the generators to be Galois invariant, i.e., invariant under the swap map.
+  Use the optional parameter 'Symmetric' to restrict the generators to be invariant under the automorphisms of the base field F, i.e., invariant under the swap map.
   Use the optional parameters 'PrecomputedGens' as an AssociativeArray to provide precomputed generators.
   Use the optional parameters 'ComputeNewGenerators' to determine if new generators will be computed.}
+
+  // check that precision is high enough
+  require Precision ge ComputePrecisionFromHilbertSeries(N, MaxGeneratorWeight): "Precision is too low; not enough coefficients for linear algebra";
+
   R := GradedRingOfHMFs(F, Precision);
   dict := ConstructGeneratorsAndRelations(R, N, MaxGeneratorWeight, MaxRelationWeight:
 					  LowestWeight:=LowestWeight,
 					  Alg:=Alg,
 					  IdealClassesSupport:=IdealClassesSupport,
-					  GaloisInvariant:=GaloisInvariant,
+					  Symmetric:=Symmetric,
 					  ComputeNewGenerators:=ComputeNewGenerators,
 					  PrecomputedGens:=PrecomputedGens);
   Gens := dict[1];
@@ -686,7 +698,6 @@ intrinsic HilbertModularVariety(F::FldNum, N::RngOrdIdl, MaxGeneratorWeight::Rng
   S := MakeScheme(Gens, Rels);
   P_wtd<[x]> := Ambient(S);
   eqns_S := DefiningEquations(S);
-  P := Parent(eqns_S[1]);
   return S;
 end intrinsic;
 
@@ -695,7 +706,7 @@ intrinsic HilbertModularSurface(F::FldQuad, N::RngOrdIdl, MaxGeneratorWeight::Rn
 				  LowestWeight:=2,
 				  Alg:="Standard",
 				  IdealClassesSupport:=false,
-				  GaloisInvariant:=false,
+				  Symmetric:=false,
 				  ComputeNewGenerators:=true,
 				  PrecomputedGens:=AssociativeArray()) -> Srfc
 {
@@ -705,7 +716,7 @@ intrinsic HilbertModularSurface(F::FldQuad, N::RngOrdIdl, MaxGeneratorWeight::Rn
   Use the optional parameter 'LowestWeight' to specifiy the lowest weight for the generators.
   The optional parameter 'Alg' is passed to ComplementBasis.
   Use the optional parameter 'IdealClassesSupport' to restrict the support of the generators to a given set of components.
-  Use the optional parameter 'GaloisInvariant' to restrict the generators to be Galois invariant, i.e., invariant under the swap map.
+  Use the optional parameter 'Symmetric' to restrict the generators to be symmetric under the automorphisms of the base field F, i.e., invariant under the swap map.
   Use the optional parameters 'PrecomputedGens' as an AssociativeArray to provide precomputed generators.
   Use the optional parameters 'ComputeNewGenerators' to determine if new generators will be computed.}
   return HilbertModularVariety(F, N, MaxGeneratorWeight, MaxRelationWeight
@@ -713,7 +724,7 @@ intrinsic HilbertModularSurface(F::FldQuad, N::RngOrdIdl, MaxGeneratorWeight::Rn
 				 LowestWeight:=LowestWeight,
 				 Alg:=Alg,
 				 IdealClassesSupport:=IdealClassesSupport,
-				 GaloisInvariant:=GaloisInvariant,
+				 Symmetric:=Symmetric,
 				 ComputeNewGenerators:=ComputeNewGenerators,
 				 PrecomputedGens:=PrecomputedGens);
 
@@ -816,4 +827,23 @@ intrinsic GeneratorWeightBound(G::GrpHilbert : experiment:=false) -> Any
     // The only generators not accounted for in the restriction come from below the weight
     // of the section.
     return Maximum(m, Degree(Numerator(poly)));
+end intrinsic;
+
+intrinsic HilbertSeriesSanityCheck(M::ModFrmHilDGRng, NN::RngOrdIdl, Is::SeqEnum[RngMPol]) -> BoolElt
+  {Given a sequence Is of ideals defining graded rings, check if the sum of their Hilbert series agrees with the one coming from the trace formula (which includes all components)}
+  H_trace := HilbertSeries(M,NN);
+  H_test := &+[HilbertSeries(I) : I in Is];
+  vprintf HilbertModularForms: "series from trace formula = %o\n", H_trace;
+  vprintf HilbertModularForms: "series from computed graded ring= %o\n", H_test;
+  return H_test eq H_trace, H_trace, H_test;
+end intrinsic;
+
+intrinsic HilbertSeriesSanityCheck(M::ModFrmHilDGRng, NN::RngOrdIdl, Rs::SeqEnum[RngMPolRes]) -> BoolElt
+  {Given a sequence Rs of graded rings, check if the sum of their Hilbert series agrees with the one coming from the trace formula (which includes all components)}
+  return HilbertSeriesSanityCheck(M, NN, [PreimageIdeal(ideal< R | 0>) : R in Rs]);
+end intrinsic;
+
+intrinsic HilbertSeriesSanityCheck(M::ModFrmHilDGRng, NN::RngOrdIdl, Ss::SeqEnum[Sch]) -> BoolElt
+  {Given a sequence Ss of surfaces, check if the sum of their Hilbert series agrees with the one coming from the trace formula (which includes all components)}
+  return HilbertSeriesSanityCheck(M, NN, [Ideal(S) : S in Ss]);
 end intrinsic;

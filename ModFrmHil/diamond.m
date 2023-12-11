@@ -144,6 +144,7 @@ function DiamondOperatorDefiniteBig(M, J)
     vprintf HilbertModularForms, 1 :
 	"Constructing the big representation matrix...\n";
     for I_src_idx in [1..hh] do
+	if (nCFD[I_src_idx] eq 0) then continue; end if;
 	vprintf HilbertModularForms, 1 :
 	    "Working on O(1)-right ideal class representative no. %o.\n", I_src_idx;
 	I_dest_idx := perm_inv[I_src_idx];
@@ -203,7 +204,12 @@ end function;
 
 intrinsic DiamondOperator(M::ModFrmHil, J::RngOrdIdl) -> AlgMatElt
 {Returns the matrix representing the diamond operator <J> on M.}
-	  
+
+    // require IsCoprime(J, Level(M)) : "Ideal representative should be coprime to the level";
+    // better - we just make it coprime;
+
+    J := CoprimeRepresentative(J, Level(M))*J;
+
     F_weight := getWeightBaseField(M);
     
     if Dimension(M) eq 0 then
@@ -262,16 +268,19 @@ function HeckeCharacterSubspace(M, chi)
     subsp := &meet [Kernel(dJ[2] - chi(dJ[1])*Id_M) : dJ in dJs];
 
     dim := Dimension(subsp);
-    
-    Id_Msub := IdentityMatrix(F_weight, dim);
-    
+   
     M_sub := HMF0(BaseField(M), Level(M), 1*Integers(K), chi, Weight(M), CentralCharacter(M));
     M_sub`basis_matrix_wrt_ambient := BasisMatrix(subsp);
     
+    L := BaseRing(M_sub`basis_matrix_wrt_ambient);
+    Id_Msub := ChangeRing(IdentityMatrix(F_weight, dim),L);
+    
     M_sub`basis_matrix_wrt_ambient_inv := 
-        Transpose(Solution( Transpose(M_sub`basis_matrix_wrt_ambient), Id_Msub));
+        Transpose(Solution( Transpose(M_sub`basis_matrix_wrt_ambient), 
+			    Id_Msub));
     if assigned M`basis_matrix then
-       M_sub`basis_matrix := M_sub`basis_matrix_wrt_ambient * M`basis_matrix;
+       M_sub`basis_matrix := M_sub`basis_matrix_wrt_ambient * 
+			     ChangeRing(M`basis_matrix,L);
        M_sub`basis_matrix_inv := Transpose(Solution( Transpose(M_sub`basis_matrix), Id_Msub));
     end if;
 

@@ -32,7 +32,14 @@ declare attributes GrpHilbert :
   Index,
   LMFDBlabel,
   Level,
-  PrintString;
+  PrintString,
+  CountEllipticPoints,
+  CuspsWithResolution,
+  CuspsWithoutResolution,
+  EulerNumber,
+  K2,
+  VolumeOfFundamentalDomain
+  ;
 
 /////////////////// Creation ///////////////////
 
@@ -41,7 +48,7 @@ intrinsic IsRealQuadraticField(F::FldNum) -> BoolElt
     return Degree(F) eq 2 and BaseRing(F) eq Rationals() and Discriminant(F) gt 0;
 end intrinsic;
 
-// Main constructor from which all else is derivedn
+// Main constructor from which all else is derived
 intrinsic CongruenceSubgroup(
               AmbientType::MonStgElt,
               GammaType::MonStgElt,
@@ -104,7 +111,8 @@ intrinsic CongruenceSubgroup(AmbType::MonStgElt, F::FldNum) -> GrpHilbert
     return CongruenceSubgroup(AmbType, F, 1*ZF, 1*ZF);
 end intrinsic;
 
-// Gamma0
+//////////////////////////
+// Gamma0 Constructors
 
 intrinsic Gamma0(AmbientType::MonStgElt, F::FldNum, N::RngOrdIdl, B::RngOrdIdl) -> GrpHilbert
 {Return the Congruence Subgroup Gamma_0(N) over the number field `F`.}
@@ -122,19 +130,35 @@ intrinsic Gamma0(F::FldNum, N::RngOrdIdl, B::RngOrdIdl) -> GrpHilbert
     return Gamma0("SL", F, N, B);
 end intrinsic;
 
-
 intrinsic Gamma0(F::FldNum, N::RngOrdIdl) -> GrpHilbert
 {Return the Congruence Subgroup Gamma_0(N) over the number field `F`.}
     return Gamma0(F, N, 1*Integers(F));
 end intrinsic;
 
+intrinsic Gamma0(N::RngOrdIdl) -> GrpHilbert
+{Return the Hilbert Modular group of level N.}
+    return Gamma0(NumberField(Order(N)), N);
+end intrinsic;
 
-// At the moment, this is the only way to create a group of type Gamma_0(N).
 intrinsic Gamma0(F::FldNum) -> GrpHilbert
 {Return the Hilbert Modular group over `F`.}
     return Gamma0(F, 1*MaximalOrder(F));
 end intrinsic;
 
+// With Ambient type
+intrinsic Gamma0(AmbientType::MonStgElt, F::FldNum, N::RngOrdIdl) -> GrpHilbert
+{Return the Congruence Subgroup Gamma_0(N) over the number field `F`.}
+    return Gamma0(AmbientType, F, N, 1*Integers(F));
+end intrinsic;
+
+intrinsic Gamma0(AmbientType::MonStgElt, F::FldNum) -> GrpHilbert
+{Return the Hilbert Modular group over `F`.}
+    return Gamma0(AmbientType, F, 1*MaximalOrder(F));
+end intrinsic;
+
+
+//////////////////////////
+// Gamma1 Constructors
 
 intrinsic Gamma1(AmbientType::MonStgElt, F::FldNum, N::RngOrdIdl, B::RngOrdIdl) -> GrpHilbert
 {Return the Congruence Subgroup Gamma_1(N) over the number field `F`.}
@@ -173,7 +197,7 @@ intrinsic Print(Gamma::GrpHilbert)
     printf "Component: (%o)\n", IdealOneLine(Component(Gamma));
     print "Index: ", Index(Gamma);
     print "Gamma Type:", GammaType(Gamma);
-    print "Supergroup:", AmbientType(Gamma);
+    printf "Supergroup: %o", AmbientType(Gamma);
     return;
 end intrinsic;
 
@@ -269,8 +293,11 @@ points.}
     // Proposition: If Gamma is the principal congruence subgroup of level N of the Hilbert
     //              modular group Gamma_{K, \frak{b}}, and N^2 is not equal to either (2) or (3),
     //              then Gamma acts freely on the squared upper half plane.
-
+    //
     // Thus, the first thing is the level and return an empty array in the trivial cases.
+
+    require IsPrincipalCongruenceSubgroup(Gamma):
+          "Congruence subgroup has mismatched gamma type.";
 
     K := BaseField(Gamma);
     ZK := RingOfIntegers(K);
@@ -287,111 +314,106 @@ points.}
         return ellipticData;
     end if;
 
-    // TODO: XXX: Properly implement elliptic points for arbitrary congruence subgroups.
-    if not IsPrincipalCongruenceSubgroup(Gamma) then
-  error "Not implemented for non-principal congruence subgroups.";
-    end if;
-
     // The next thing to check is if we are in one of the special discriminant cases.
     // The special discriminants vis a vis torsion are D = 5, 8, 12.
     if D in [5,8,12] then
-  return _EllipticPointDataSpecialCases(Gamma);
+        return _EllipticPointDataSpecialCases(Gamma);
     end if;
 
     if Index(Gamma) eq 1 then
-  // If we are looking at the full Hilbert Modular Group with component \frak{b},
-  // then [vdG, p. 267] provides tables to compute the number and types of torsion points.
+        // If we are looking at the full Hilbert Modular Group with component \frak{b},
+        // then [vdG, p. 267] provides tables to compute the number and types of torsion points.
 
-  // Order 2 points.
-  //
-  if D mod 4 eq 1 then
-      ellipticData[<2,1,1>] := ClassNumber(-4*D);
-  elif D mod 8 eq 0 then
-      ellipticData[<2,1,1>] := 3*ClassNumber(-D);
-  else
-      Dby4 := ExactQuotient(D, 4);
-      h := ClassNumber(-Dby4);
+        // Order 2 points.
+        //
+        if D mod 4 eq 1 then
+            ellipticData[<2,1,1>] := ClassNumber(-4*D);
+        elif D mod 8 eq 0 then
+            ellipticData[<2,1,1>] := 3*ClassNumber(-D);
+        else
+            Dby4 := ExactQuotient(D, 4);
+            h := ClassNumber(-Dby4);
 
-      case [Dby4 mod 8, B mod 4]:
-      when [3,1]:
-    ellipticData[<2,1,1>] := 10*h;
-      when [3,3]:
-    ellipticData[<2,1,1>] := 10*h;
-      when [7,1]:
-    ellipticData[<2,1,1>] := 4*h;
-      when [7,3]:
-    ellipticData[<2,1,1>] := 4*h;
-      end case;
-  end if;
+            case [Dby4 mod 8, B mod 4]:
+            when [3,1]:
+                ellipticData[<2,1,1>] := 10*h;
+            when [3,3]:
+                ellipticData[<2,1,1>] := 10*h;
+            when [7,1]:
+                ellipticData[<2,1,1>] := 4*h;
+            when [7,3]:
+                ellipticData[<2,1,1>] := 4*h;
+            end case;
+        end if;
 
-  // Order 3 points
-  //
-  if D mod 3 ne 0 then
-      h := ExactQuotient(ClassNumber(-3*D), 2);
-      ellipticData[<3,1, 1>] := h;
-      ellipticData[<3,1,-1>] := h;
-  else
-      Dby3 := ExactQuotient(D, 3);
-      h := ClassNumber(-Dby3);
+        // Order 3 points
+        //
+        if D mod 3 ne 0 then
+            h := ExactQuotient(ClassNumber(-3*D), 2);
+            ellipticData[<3,1, 1>] := h;
+            ellipticData[<3,1,-1>] := h;
+        else
+            Dby3 := ExactQuotient(D, 3);
+            h := ClassNumber(-Dby3);
 
-      case [Dby3 mod 3, B mod 3]:
-      when [1,1]:
-    ellipticData[<3,1,1>] := 4*h;
-    ellipticData[<3,1,-1>] := h;
+            case [Dby3 mod 3, B mod 3]:
+            when [1,1]:
+                ellipticData[<3,1,1>] := 4*h;
+                ellipticData[<3,1,-1>] := h;
 
-      when [1,2]:
-    ellipticData[<3,1,1>] := h;
-    ellipticData[<3,1,-1>] := 4*h;
+            when [1,2]:
+                ellipticData[<3,1,1>] := h;
+                ellipticData[<3,1,-1>] := 4*h;
 
-      when [2,1]:
-    ellipticData[<3,1,1>] := 3*h;
-    ellipticData[<3,1,-1>] := 0;
+            when [2,1]:
+                ellipticData[<3,1,1>] := 3*h;
+                ellipticData[<3,1,-1>] := 0;
 
-      when [2,2]:
-    ellipticData[<3,1,1>] := 0;
-    ellipticData[<3,1,-1>] := 3*h;
-      end case;
-  end if;
+            when [2,2]:
+                ellipticData[<3,1,1>] := 0;
+                ellipticData[<3,1,-1>] := 3*h;
+            end case;
+        end if;
 
     elif IsPrincipalCongruenceSubgroup(Gamma) then
-  // Let A := Norm(\frak{b}), where \frak{b} := ComponentIdeal(Gamma). We use the following
-  // remark of [vdG, p. 110]
-  //
-  // Proposition: If (A, N) = 1, then the number of elliptic points is given by...
-  //
-  if N^2 eq 2*ZK then
-      if D mod 8 eq 0 then
-    ellipticData[<2, 1, 1>] := 6 * ClassNumber(-D);
-      elif D mod 4 eq 0 then
-    Dby4 := ExactQuotient(D, 4);
-    h := ClassNumber(-Dby4);
+        // Let A := Norm(\frak{b}), where \frak{b} := ComponentIdeal(Gamma). We use the following
+        // remark of [vdG, p. 110]
+        //
+        // Proposition: If (A, N) = 1, then the number of elliptic points is given by...
+        //
+        if N^2 eq 2*ZK then
+            if D mod 8 eq 0 then
+                ellipticData[<2, 1, 1>] := 6 * ClassNumber(-D);
+            elif D mod 4 eq 0 then
+                Dby4 := ExactQuotient(D, 4);
+                h := ClassNumber(-Dby4);
 
-    case Dby4 mod 8:
-    when 7:
-        ellipticData[<2, 1, 1>] := 12 * h;
+                case Dby4 mod 8:
+                when 7:
+                    ellipticData[<2, 1, 1>] := 12 * h;
 
-    when 3:
-         ellipticData[<2, 1, 1>] := 24 * h;
-    end case;
-      end if;
+                when 3:
+                    ellipticData[<2, 1, 1>] := 24 * h;
+                end case;
+            end if;
 
-  elif N^2 eq 3*ZK then
-      if D mod 3 eq 0 then
-    Dby3 := ExactQuotient(D, 3);
-    h := ClassNumber(-Dby3);
+        elif N^2 eq 3*ZK then
+            if D mod 3 eq 0 then
+                Dby3 := ExactQuotient(D, 3);
+                h := ClassNumber(-Dby3);
 
-    // In each case, there are no points of the other type.
-    case (B*D) mod 9:
-    when 6:
-        ellipticData[<3, 1, 1>] := 12 * h;
+                // In each case, there are no points of the other type.
+                case (B*D) mod 9:
+                when 6:
+                    ellipticData[<3, 1, 1>] := 12 * h;
 
-    when 3:
-        ellipticData[<3, 1, -1>] := 12 * h;
-    end case;
-      end if;
-  end if;
-  //
-  // (End of Theorem)
+                when 3:
+                    ellipticData[<3, 1, -1>] := 12 * h;
+                end case;
+            end if;
+        end if;
+        //
+        // (End of Theorem)
     end if;
 
     // Assign into Gamma and return
@@ -407,36 +429,36 @@ intrinsic _EllipticPointDataSpecialCases(Gamma::GrpHilbert) -> Assoc
     require Index(Gamma) eq 1 : "Only implemented for level 1 for special discrminants.";
 
     if D eq 5 then
-  ellipticData[<2, 1, 1>] := 2;
-  ellipticData[<3, 1, 1>] := 1;
-  ellipticData[<3, 1,-1>] := 1;
-  ellipticData[<5, 1, 3>] := 1; // Type <5, 2, 1>
-  ellipticData[<5, 1, 2>] := 1; // Type <5, 3, 1>
+        ellipticData[<2, 1, 1>] := 2;
+        ellipticData[<3, 1, 1>] := 1;
+        ellipticData[<3, 1,-1>] := 1;
+        ellipticData[<5, 1, 3>] := 1; // Type <5, 2, 1>
+        ellipticData[<5, 1, 2>] := 1; // Type <5, 3, 1>
 
     elif D eq 8 then
-  ellipticData[<2, 1, 1>] := 2;
-  ellipticData[<3, 1, 1>] := 1;
-  ellipticData[<3, 1,-1>] := 1;
-  ellipticData[<4, 1, 1>] := 1;
-  ellipticData[<4, 1,-1>] := 1;
+        ellipticData[<2, 1, 1>] := 2;
+        ellipticData[<3, 1, 1>] := 1;
+        ellipticData[<3, 1,-1>] := 1;
+        ellipticData[<4, 1, 1>] := 1;
+        ellipticData[<4, 1,-1>] := 1;
 
     elif D eq 12 then
 
-  B := Component(Gamma);
+        B := Component(Gamma);
 
-  if HasTotallyPositiveGenerator(B) then
-      ellipticData[<2, 1, 1>] := 3;
-      ellipticData[<3, 1, 1>] := 2;
-      ellipticData[<3, 1,-1>] := 0;
-      ellipticData[<6, 1,-1>] := 1;
+        if HasTotallyPositiveGenerator(B) then
+            ellipticData[<2, 1, 1>] := 3;
+            ellipticData[<3, 1, 1>] := 2;
+            ellipticData[<3, 1,-1>] := 0;
+            ellipticData[<6, 1,-1>] := 1;
 
-  else
-      ellipticData[<2, 1, 1>] := 3;
-      ellipticData[<3, 1, 1>] := 0;
-      ellipticData[<3, 1,-1>] := 2;
-      ellipticData[<6, 1, 1>] := 1;
+        else
+            ellipticData[<2, 1, 1>] := 3;
+            ellipticData[<3, 1, 1>] := 0;
+            ellipticData[<3, 1,-1>] := 2;
+            ellipticData[<6, 1, 1>] := 1;
 
-  end if;
+        end if;
     end if;
 
     Gamma`EllipticPointData := ellipticData;
@@ -444,8 +466,15 @@ intrinsic _EllipticPointDataSpecialCases(Gamma::GrpHilbert) -> Assoc
 end intrinsic;
 
 intrinsic NumberOfEllipticPoints(Gamma::GrpHilbert) -> RngIntElt
+  {}
+  return &+[Integers() | A[k] : k in Keys(A)] where A := EllipticPointData(Gamma);
+end intrinsic;
+
+intrinsic NumberOfEllipticPoints(Gamma::GrpHilbert, ord::RngIntElt) -> RngIntElt
 {}
-    return #EllipticPointData(Gamma);
+    types := SetToSequence(Keys(EllipticPointData(Gamma)));
+    types := [t: t in types | IntegerTuple(t)[1] eq ord];
+    return &+ [Integers()| EllipticPointData(Gamma)[t]: t in types];
 end intrinsic;
 
 intrinsic NumberOfEllipticPoints(Gamma::GrpHilbert, singType::Tup) -> RngIntElt
@@ -467,12 +496,12 @@ full Hilbert modular group.}
     n := Norm(N);
     if n eq 1 then return 1; end if;
 
-    index := 1;
-    for ff in Factorization(n) do
-        q := ff[1]^ff[2];
-        index *:= q * (q^2 - 1);
+    index := n^3;
+    for ff in Factorization(N) do
+        q := #quo< Integers(F) | ff[1]>;
+        index *:= 1 - 1/q^2;
     end for;
-    return n;
+    return Integers()!index;
 end intrinsic;
 
 intrinsic IndexOfGamma0(F::FldNum, N::RngOrdIdl) -> RngIntElt
@@ -528,18 +557,7 @@ end intrinsic;
 
 intrinsic NumberOfCusps(Gamma::GrpHilbert) -> RngIntElt
 {Computes the number of cusps of Gamma_0(N).}
-
-    error "Congruence Subgroup of the form Gamma_0(N) not implemented.";
-
-    // Create the HMF ring.
-    F := BaseField(Gamma);
-    N := Level(Gamma);
-    prec := 20; // This should be irrelevant.
-    M := GradedRingOfHMFs(F, prec);
-    Mn := HMFSpace(M, N, [k : k in [1..Degree(F)]]);
-
-    // Return the number of cusps.
-    return NumberOfCusps(Mn); // TODO: XXX:
+    return #Cusps(Gamma);
 end intrinsic;
 
 intrinsic NumberOfParabolicPoints(Gamma::GrpHilbert) -> RngIntElt
@@ -550,6 +568,16 @@ end intrinsic;
 
 intrinsic Cusps(Gamma::GrpHilbert : WithResolution:=false) -> SeqEnum
 {Return the cusps of X_Gamma as a sequence of points in a projective space.}
+  if assigned Gamma`CuspsWithResolution then
+    if WithResolution then
+      return Gamma`CuspsWithResolution;
+    else
+      return [<elt[1], elt[2]> : elt in Gamma`CuspsWithResolution];
+    end if;
+  end if;
+  if not WithResolution and assigned Gamma`CuspsWithoutResolution then
+    return Gamma`CuspsWithoutResolution;
+  end if;
   NN := Level(Gamma);
   bb := Component(Gamma);
   ZF := Integers(BaseField(Gamma));
@@ -566,7 +594,7 @@ intrinsic Cusps(Gamma::GrpHilbert : WithResolution:=false) -> SeqEnum
   end if;
   working_bb := scalar*bb;
   assert GCD(working_bb, NN) eq 1*ZF;
-  cusps := Cusps(NN, working_bb : GammaType := GammaType(Gamma));
+  cusps := Cusps(NN, working_bb : GammaType := GammaType(Gamma), GroupType := GroupType);
   res := [];
   for c in cusps do
     _, MM, pt := Explode(c);
@@ -578,12 +606,19 @@ intrinsic Cusps(Gamma::GrpHilbert : WithResolution:=false) -> SeqEnum
     // FIXME: alpha and beta are not canonical
     pt := P1ZF![Numerator(scalar)*alpha, Denominator(scalar)*beta];
     if WithResolution then
-      continued_fraction, period := CuspResolutionIntersections(working_bb, NN, alpha, beta : GroupType:=GroupType);
+      continued_fraction, period :=
+          CuspResolutionIntersections(working_bb, NN, alpha, beta :
+                                      GroupType:=GroupType, GammaType := GammaType(Gamma));
       Append(~res, <MM, pt, continued_fraction, period>);
     else
       Append(~res, <MM, pt>);
     end if;
   end for;
+  if WithResolution then
+    Gamma`CuspsWithResolution := res;
+  else
+    Gamma`CuspsWithoutResolution := res;
+  end if;
   return res;
 end intrinsic;
 
@@ -592,16 +627,42 @@ intrinsic CuspsWithResolution(Gamma::GrpHilbert) -> SeqEnum
   return Cusps(Gamma : WithResolution:=true);
 end intrinsic;
 
+intrinsic LengthOfCuspResolutions(Gamma::GrpHilbert) -> RngIntElt
+{Return the total number of curves appearing in cusp resolutions}
+    return &+ [(#cusp[3]) * cusp[4]: cusp in CuspsWithResolution(Gamma)];    
+end intrinsic;
+
+intrinsic LengthOfEllipticPointResolutions(Gamma::GrpHilbert) -> RngIntElt
+{Return the total number of curves appearing in elliptic point resolutions}
+    res := 0;
+    for rot_factor in Keys(EllipticPointData(Gamma)) do
+        rot_tup := IntegerTuple(rot_factor);
+        n := rot_tup[1];
+        _, len := EllipticPointK2E(n, rot_tup[3]);
+        res +:= len;
+    end for;
+    return res;
+end intrinsic;
+
+intrinsic LengthOfResolutions(Gamma::GrpHilbert) -> RngIntElt
+{Return the total number of curves appearing in the resultion of singularities}
+    return LengthOfCuspResolutions(Gamma) + LengthOfEllipticPointResolutions(Gamma);
+    end intrinsic;
+
 intrinsic WriteCuspDataToRow(G::GrpHilbert, elt::Tup) -> MonStgElt
   {Script for writing cusp data to data table row}
 
-  bb := Component(G);
   MM, pt, cf, p := Explode(elt);
   // WARNING: alpha and beta are not normalized according to Level and Component
   // and not canonical
   alpha, beta := Explode(Eltseq(pt));
   ptstr := StripWhiteSpace(Sprint([Eltseq(elt) : elt in [alpha, beta]]));
 
-  return Join([LMFDBLabel(G), LMFDBLabel(bb), LMFDBLabel(MM), ptstr, StripWhiteSpace(Sprint(cf)), Sprint(p)], ":");
+  return Join([LMFDBLabel(G), LMFDBLabel(MM), ptstr, StripWhiteSpace(Sprint(cf)), Sprint(p)], ":");
 end intrinsic;
 
+intrinsic WriteEllipticPointDataToRow(G::GrpHilbert, r::GrpHilbRotationLabel, nb::RngIntElt) -> MonStgElt
+{Script for writing elliptic point data to table row}
+    n, a, b := Explode(Tuple(r));
+    return Join([LMFDBLabel(G), StripWhiteSpace(Sprint([Integers()|n,a,b])), Sprint(nb)], ":");
+end intrinsic;

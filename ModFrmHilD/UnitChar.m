@@ -21,8 +21,9 @@ intrinsic Evaluate(omega::GrpCharUnitTotElt, x::RngElt) -> RngElt
     b, c := IsDefined(omega`cachedvalues, F!x);
     if not b then
       U, mU := TotallyPositiveUnits(F);
+      orients := TotallyPositiveUnitsGeneratorsOrients(F);
       vals := omega`vals;
-      c := &*[vals[i]^a[i] : i in [1..#vals]] where a := Eltseq(U!(x@@mU));
+      c := &*[vals[i]^(a[i]*orients[i]) : i in [1..#vals]] where a := Eltseq(U!(x@@mU));
       omega`cachedvalues[F!x] := c;
     end if;
     return c;
@@ -86,6 +87,44 @@ intrinsic TrivialUnitCharacter(F::FldAlg) -> GrpCharUnitTotElt
    of the ring of integers of F.}
 
  return UnitCharacter(F, [1: i in [1..#Generators(TotallyPositiveUnits(F))]]);
+end intrinsic;
+
+intrinsic WeightUnitCharacter(F::FldAlg, k::SeqEnum[RngIntElt]) -> GrpCharUnitTotElt
+  {
+    input:
+      F: A (totally real) number field
+      k: A sequence of (positive) integers
+    returns:
+      The unit character sending eps to 
+      \prod_i eps_i^(k_i/2),
+      where eps_i is the image of eps under the ith real embedding of F
+      and k is the weight associated to Mk. 
+
+      This is the "standard" unit character. It is trivial for parallel weight
+      because (\prod_i eps_i)^k = N(eps)^k = 1, but for nonparallel weight
+      it will be nontrivial. 
+  }
+
+  // if the weight is parallel then the unit character is trivial
+  if IsParallel(k) then
+    return TrivialUnitCharacter(F);
+  end if;
+
+  n := Degree(F);
+  places := RealPlaces(F);
+  
+  vals := [];
+  for eps in TotallyPositiveUnitsGenerators(F) do
+    // EltToShiftedHalfWeight computes 
+    // \prod_i eps_i^((k_0-k_i)/2),
+    // where k_0 = Max(k). However, 
+    // prod_i eps_i^(k_0/2) = N(eps)^(k_0/2) = 1
+    // since we take positive square roots, so 
+    // to get the product we want we just need 
+    // to invert the output. 
+    Append(~vals, EltToShiftedHalfWeight(F!eps, k)^-1);
+  end for;
+  return UnitCharacter(F, vals);
 end intrinsic;
 
 intrinsic Print(omega::GrpCharUnitTotElt, level::MonStgElt)

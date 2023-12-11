@@ -80,6 +80,7 @@ intrinsic GeneratorsOfQuotientModule(ss::RngOrdFracIdl, MM::RngOrdIdl) -> SeqEnu
   return [a*(el @@ mpMM) : el in U_seq];
 end intrinsic;
 
+// Obsolete function.
 // see section 5 of paper (eqn 5.1.5) or Dasgupta-Kakde Def 3.4
 // Use transversal for <eps> < (ZF/MM)^* to get one representative from each of the orbits of (ss/(ss*MM))^* under the action of epsilon
 intrinsic GeneratorsOfQuotientModuleModuloTotallyPositiveUnits(ss::RngOrdFracIdl, MM::RngOrdIdl) -> SeqEnum
@@ -89,7 +90,7 @@ intrinsic GeneratorsOfQuotientModuleModuloTotallyPositiveUnits(ss::RngOrdFracIdl
   F := Parent(a);
   F := NumberField(F);
   ZF := Integers(F);
-  eps := FundamentalUnitTotPos(F);
+  eps := TotallyPositiveUnitsGenerators(F)[1];
 
   ZFMM, mp := quo<ZF |MM>;
   UQ, mpQ := UnitGroup(ZFMM);
@@ -100,117 +101,121 @@ intrinsic GeneratorsOfQuotientModuleModuloTotallyPositiveUnits(ss::RngOrdFracIdl
   return [ReduceModuloIdeal(el, ss, ss*MM) : el in reps];
 end intrinsic;
 
-intrinsic MakePairsForQuadruple(NN::RngOrdIdl, bb::RngOrdIdl, ss::RngOrdFracIdl, MM::RngOrdIdl : GammaType := "Gamma0") -> SeqEnum
-  {}
-
-  ZF := Order(NN);
-  F := NumberField(ZF);
-  eps_p := FundamentalUnitTotPos(F);
-  if Degree(F) eq 1 then
-    eps := ZF!1;
-  else
-    eps := FundamentalUnit(F);
-  end if;
-
-  if GammaType in ["Gamma0", "Gamma1"] then
-    a := GeneratorOfQuotientModuleCRT(ss,MM);
-    c := GeneratorOfQuotientModuleCRT(ss*bb*MM,(NN/MM));
-    ZFMM, mpMM := quo<ZF | MM>;
-    ZFNNMM, mpNNMM := quo<ZF | (NN div MM) >;
-  elif GammaType eq "Gamma" then
-    // TODO: is this right?
-    a := GeneratorOfQuotientModuleCRT(ss,NN);
-    c := GeneratorOfQuotientModuleCRT(ss*bb,NN);
-    ZFMM, mpMM := quo<ZF | NN>;
-    ZFNNMM, mpNNMM := quo<ZF | NN >;
-  else
-    error "GammaType not recognized";
-  end if;
-
-  
-  UQMM, mpQMM := UnitGroup(ZFMM);
-  UQNNMM, mpQNNMM := UnitGroup(ZFNNMM);
-
-  eps_barMM := mpMM(eps) @@ mpQMM;
-  eps_barNNMM := mpNNMM(eps) @@ mpQNNMM;
-  eps_p_barMM := mpMM(eps_p) @@ mpQMM;
-  eps_p_barNNMM := mpNNMM(eps_p) @@ mpQNNMM;
-
-  D, i1, i2, p1, p2 := DirectSum(UQMM, UQNNMM);
-  //printf "direct sum = %o\n", D;
-  if GammaType eq "Gamma1" then
-    gens := [i1(mpMM(eps) @@ mpQMM) + i2(mpNNMM(eps) @@ mpQNNMM), i1(mpMM(-1) @@ mpQMM) + i2(mpNNMM(-1) @@ mpQNNMM), i1(eps_p_barMM), i2(eps_p_barNNMM)];
-  elif GammaType eq "Gamma0" then
-    gens := [i1(mpMM(eps) @@ mpQMM) + i2(mpNNMM(eps) @@ mpQNNMM), i1(mpMM(-1) @@ mpQMM) + i2(mpNNMM(-1) @@ mpQNNMM), i1(eps_p_barMM), i2(eps_p_barNNMM)];
-    // mod out by (R/NN)^\times, as in eqn 5.1.7
-    ZFNN, mpNN := quo<ZF |NN>;
-    UQNN, mpQNN:= UnitGroup(ZFNN);
-    UQNN_gens := [mpQNN(el) : el in Generators(UQNN)];
-    gens cat:= [i1(mpMM(el) @@ mpQMM) - i2(mpNNMM(el) @@ mpQNNMM) : el in UQNN_gens]; // in i2 el or -el???
-  elif GammaType eq "Gamma" then
-    gens := [i1(mpMM(eps) @@ mpQMM) + i2(mpNNMM(eps) @@ mpQNNMM), i1(mpMM(-1) @@ mpQMM) + i2(mpNNMM(-1) @@ mpQNNMM)];
-  else
-    error "GammaType not recognized";
-  end if;
-  eps_gp := sub< D | gens >;
-  //printf "eps_gp = %o\n", eps_gp;
-  //printf "gens = %o\n", gens;
-  T := [];
-  for el in Transversal(D, eps_gp) do
-    Append(~T, [* mpQMM(p1(el)) @@ mpMM, mpQNNMM(p2(el)) @@ mpNNMM *]);
-  end for;
-  reps := [ [* a*(el[1] @@ mpMM), c*(el[2] @@ mpNNMM) *] : el in T];
-  final := [];
-  for el in reps do
-    a0, c0 := Explode(el);
-    if GammaType in ["Gamma0", "Gamma1"] then
-      // alternative Gamma0 approach: take output of Gamma1 cusps, then mod out by following relation. Rescale so that first components match, then see if second components differ multiplicatively by a unit of ZF/NN
-      // see also p. 100 of Diamond and Shurman
-      a_new := ReduceModuloIdeal(a0, ss, ss*MM);
-      c_new := ReduceModuloIdeal(c0, ss*bb*MM, ss*bb*NN);
-      if c_new eq 0 then
-        c_new := Generators(ss*bb*MM)[1];
-      end if;
-    elif GammaType eq "Gamma" then
-      a_new := ReduceModuloIdeal(a0, ss, ss*NN);
-      c_new := ReduceModuloIdeal(c0, ss*bb, ss*bb*NN);
-      if c_new eq 0 then
-        c_new := Generators(ss*bb*MM)[1];
-      end if;
+intrinsic MakePairsForQuadruple(NN::RngOrdIdl, bb::RngOrdIdl, ss::RngOrdFracIdl, MM::RngOrdIdl : GammaType := "Gamma0", GroupType := "GL2+") -> SeqEnum
+{}
+    require GammaType in ["Gamma0", "Gamma1", "Gamma"]: "GammaType not recognized:", GammaType;
+    require GroupType in ["GL2+", "SL2"]: "GroupType not recognized:", GroupType;
+      
+    ZF := Order(NN);
+    F := NumberField(ZF);
+    eps_p := TotallyPositiveUnitsGenerators(F)[1];
+    if Degree(F) eq 1 then
+        eps := ZF!1;
     else
-      error "GammaType not recognized";
+        eps := FundamentalUnit(F);
     end if;
-    //vprintf HilbertModularForms: "final a = %o, c = %o\n", a_new, c_new;
-    Append(~final, [F|a_new, c_new]);
-  end for;
-  return final;
+    eps_sqr := eps^2;
+
+    if GammaType in ["Gamma0", "Gamma1"] then
+        a := GeneratorOfQuotientModuleCRT(ss,MM);
+        c := GeneratorOfQuotientModuleCRT(ss*bb*MM,(NN/MM));
+        ZFMM, mpMM := quo<ZF | MM>;
+        ZFNNMM, mpNNMM := quo<ZF | (NN div MM) >;	
+    elif GammaType eq "Gamma" then
+        // TODO: is this right?
+        a := GeneratorOfQuotientModuleCRT(ss,MM);
+        c := GeneratorOfQuotientModuleCRT(ss*bb,NN);
+        ZFMM, mpMM := quo<ZF | MM>;
+        ZFNN, mpNN := quo<ZF | NN >;
+	ZFNNMM, mpNNMM := quo<ZF | (NN div MM) >;
+    end if;
+  
+    UQMM, mpQMM := UnitGroup(ZFMM);
+    UQNNMM, mpQNNMM := UnitGroup(ZFNNMM);
+    
+    eps_barMM := mpMM(eps) @@ mpQMM;
+    eps_barNNMM := mpNNMM(eps) @@ mpQNNMM;
+    eps_p_barMM := mpMM(eps_p) @@ mpQMM;
+    eps_p_barNNMM := mpNNMM(eps_p) @@ mpQNNMM;
+    eps_sqr_barMM := mpMM(eps_sqr) @@ mpQMM;
+    eps_sqr_barNNMM := mpNNMM(eps_sqr) @@ mpQNNMM;
+
+    D, i1, i2, p1, p2 := DirectSum(UQMM, UQNNMM);
+    
+    gens := [i1(mpMM(eps) @@ mpQMM) + i2(mpNNMM(eps) @@ mpQNNMM),
+             i1(mpMM(-1) @@ mpQMM) + i2(mpNNMM(-1) @@ mpQNNMM)];
+    if GammaType in ["Gamma1", "Gamma0"] then
+        if GroupType eq "GL2+" then
+            gens cat:= [i1(eps_p_barMM), i2(eps_p_barNNMM)];
+        elif GroupType eq "SL2" then
+            gens cat:= [i1(eps_sqr_barMM), i2(eps_sqr_barNNMM)];
+        end if;
+    end if;
+    if GammaType eq "Gamma0" then
+        // mod out by (R/NN)^\times, as in eqn 5.1.7
+        ZFNN, mpNN := quo<ZF |NN>;
+        UQNN, mpQNN:= UnitGroup(ZFNN);
+        UQNN_gens := [mpQNN(el) : el in Generators(UQNN)];
+        gens cat:= [i1(mpMM(el) @@ mpQMM) - i2(mpNNMM(el) @@ mpQNNMM) : el in UQNN_gens];
+    end if;
+    //Add nothing for Gamma
+    
+    // alternative Gamma0 approach: take output of Gamma1 cusps, then mod out by following relation. Rescale so that first components match, then see if second components differ multiplicatively by a unit of ZF/NN
+    // see also p. 100 of Diamond and Shurman
+    
+    eps_gp := sub< D | gens >;
+    T := [];
+    for el in Transversal(D, eps_gp) do
+        Append(~T, [* mpQMM(p1(el)) @@ mpMM, mpQNNMM(p2(el)) @@ mpNNMM *]);
+    end for;
+    reps := [ [* a*(el[1] @@ mpMM), c*(el[2] @@ mpNNMM) *] : el in T];
+    if GammaType eq "Gamma" then
+	// !! TODO - there should be a better way to get at the kernel
+	ker_red := [x @@ mpNN : x in ZFNN | mpMM(x @@ mpNN) eq 0];
+	reps := [ [* r[1] + k, r[2] *] : r in reps, k in ker_red];
+    end if;
+    final := [];
+    for el in reps do
+        a0, c0 := Explode(el);
+        if GammaType in ["Gamma0", "Gamma1"] then
+            a_new := ReduceModuloIdeal(a0, ss, ss*MM);
+            c_new := ReduceModuloIdeal(c0, ss*bb*MM, ss*bb*NN);
+            if c_new eq 0 then
+                c_new := Generators(ss*bb*MM)[1];
+            end if;
+        elif GammaType eq "Gamma" then
+            a_new := ReduceModuloIdeal(a0, ss, ss*NN);
+            c_new := ReduceModuloIdeal(c0, ss*bb*MM, ss*bb*NN);
+            if c_new eq 0 then
+                c_new := Generators(ss*bb*MM)[1];
+            end if;
+        end if;
+        //vprintf HilbertModularForms: "final a = %o, c = %o\n", a_new, c_new;
+        Append(~final, [F|a_new, c_new]);
+    end for;
+    return final;
 end intrinsic;
 
 // P_1(NN)_bb in eqn 5.1.6 in paper, or Lemma 3.6 of Dasgupta-Kakde
 // P_0(NN)_bb in eqn 5.1.9 in paper
-intrinsic CuspQuadruples(NN::RngOrdIdl, bb::RngOrdIdl : GammaType := "Gamma0") -> SeqEnum
-  {Return list of quadruples given in Lemma 3.6 of Dasgupta-Kakde (resp., eqn 5.1.9 in paper), which is in bijection with cusps of Gamma_1(NN)_bb (resp., of Gamma_0(NN)_bb).}
-  ZF := Order(NN);
-  F := NumberField(ZF);
-  mpCl := ClassGroupPrimeRepresentatives(ZF,NN);
-  Cl := Domain(mpCl);
-  Cl_seq := [mpCl(el) : el in Cl];
+intrinsic CuspQuadruples(NN::RngOrdIdl, bb::RngOrdIdl : GammaType := "Gamma0", GroupType := "GL2+") -> SeqEnum
+{Return list of quadruples given in Lemma 3.6 of Dasgupta-Kakde (resp., eqn 5.1.9 in paper), which is in bijection with cusps of Gamma_1(NN)_bb (resp., of Gamma_0(NN)_bb).}
+    ZF := Order(NN);
+    F := NumberField(ZF);
+    mpCl := ClassGroupPrimeRepresentatives(ZF,NN);
+    Cl := Domain(mpCl);
+    Cl_seq := [mpCl(el) : el in Cl];
  
-  quads := [];
-  for ss in Cl_seq do
-    //printf "ss = %o\n", ss;
-    for MM in Divisors(NN) do
-      //printf "MM = %o\n", MM;
-      //RssMM := GeneratorsOfQuotientModuleModuloTotallyPositiveUnits(ss,MM);
-      //RssMM_comp := GeneratorsOfQuotientModuleModuloTotallyPositiveUnits(ss*bb*MM,(NN/MM));
-      pairs := MakePairsForQuadruple(NN, bb, ss, MM : GammaType := GammaType);
-      //printf "pairs = %o\n", pairs;
-      for el in pairs do
-        Append(~quads, [* ss, MM, el *]);
-      end for;
+    quads := [];
+    for ss in Cl_seq do
+        for MM in Divisors(NN) do
+            pairs := MakePairsForQuadruple(NN, bb, ss, MM : GammaType := GammaType, GroupType := GroupType);
+            for el in pairs do
+                Append(~quads, [* ss, MM, el *]);
+            end for;
+        end for;
     end for;
-  end for;
-  return quads;
+    return quads;
 end intrinsic;
 
 // see Lemma 5.1.10 in paper, or Lemma 3.6 of Dasgupta-Kakde
@@ -256,13 +261,13 @@ intrinsic IntegralCoordinates(x::Pt) -> SeqEnum
   return [Integers()!(d*el) : el in x_seq];
 end intrinsic;
 
-intrinsic Cusps(NN::RngOrdIdl, bb::RngOrdIdl : GammaType := "Gamma0") -> SeqEnum
+intrinsic Cusps(NN::RngOrdIdl, bb::RngOrdIdl : GammaType := "Gamma0", GroupType := "GL2+") -> SeqEnum
   {}
   ZF := Order(NN);
   F := NumberField(ZF);
   require GCD(NN,bb) eq 1*ZF : "Level and component must be coprime";
   PP1 := ProjectiveSpace(F,1);
-  quads := CuspQuadruples(NN, bb : GammaType := GammaType);
+  quads := CuspQuadruples(NN, bb : GammaType := GammaType, GroupType := GroupType);
   cusps_seq := [];
   for quad in quads do
     ss, MM, ac_bar := Explode(quad);
@@ -359,6 +364,8 @@ intrinsic CuspSanityCheck(NN::RngOrdIdl : GammaType := "Gamma0") -> BoolElt
       d := NumberOfCusps(Mk); //Computed using \sum_M \phi(...)    
   elif GammaType eq "Gamma1" then
       d := quad_cnt; //Replace with some other test
+  elif GammaType eq "Gamma" then
+      d := GammaCuspCount(NN);
   else
       error "GammaType not recognized";
   end if;
@@ -405,7 +412,7 @@ intrinsic CuspGetEisensteinDimension(Mk::ModFrmHilD) -> RngIntElt
 {return the dimension of E(Mk)}
     N := Level(Mk);
     newforms_levels := AssociativeArray();
-    for pair in CuspEisensteinAdmissibleCharacterPairs(Mk) do
+    for pair in EisensteinAdmissibleCharacterPairs(Mk : IdentifyConjugates := false, NewformsOnly := false) do
         lvl := Conductor(pair[1]) * Conductor(pair[2]);
         if not IsDefined(newforms_levels, lvl) then
             newforms_levels[lvl] := 0;
@@ -417,36 +424,3 @@ intrinsic CuspGetEisensteinDimension(Mk::ModFrmHilD) -> RngIntElt
     //print partial_dims;
     return &+partial_dims;
 end intrinsic;
-
-intrinsic CuspEisensteinAdmissibleCharacterPairs(Mk::ModFrmHilD) -> SeqEnum
-{returns a list of all the primitive pairs <chi1, chi2> such that chi1*chi2 =
-Character(Mk) and Conductor(chi1)*Conductor(chi2) | Level(Mk) If the weight is
-1, we only return pairs up to permutation}
-    N := Level(Mk);
-    k := Weight(Mk);
-    assert k eq [2,2];
-    k := k[1];
-    chi := Character(Mk);
-    M := Parent(Mk);
-    X := HeckeCharacterGroup(N, [1..Degree(BaseField(M))]);
-    assert X eq Parent(chi);
-    chis := Elements(X);
-    chis_reps := Set(chis); //Set(GaloisConjugacyRepresentatives(chis));
-    chis_reps_index := {i : i->c in chis | c in chis_reps};
-    chiscond := [Conductor(c) : c in chis];
-    chisdict := AssociativeArray();
-    for i->c in chis do
-        chisdict[c] := i;
-    end for;
-    // [i, j] pairs st chis[i]*chis[j] = chi
-    pairs := [ [i, chisdict[chi*c^-1]] : i->c in chis | i in chis_reps_index ];
-    // filter based on conductor
-    pairs := [ p : p in pairs | N subset chiscond[p[1]] * chiscond[p[2]] ];
-    // k=2, so ignore special weight 1 case
-    prims := AssociativeArray();
-    for i in SequenceToSet(&cat pairs) do
-        prims[i] := AssociatedPrimitiveCharacter(chis[i]);
-    end for;
-    return [* <prims[p[1]], prims[p[2]]> : p in pairs *];
-end intrinsic;
-

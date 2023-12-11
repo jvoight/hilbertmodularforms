@@ -144,11 +144,27 @@ intrinsic HilbertSeriesLevelOne(M::ModFrmHilDGRng) -> FldFunRatUElt
     return HilbertSeriesVasquez(BaseField(M));
 end intrinsic;
 
-intrinsic HilbertSeries(G::GrpHilbert) -> FldFunRatUElt
+intrinsic HilbertSeries(F::FldNum, level::RngOrdIdl) -> FldFunRatUElt
 {Return the Hilbert series for the space of Hilbert Modular Forms of weight `k` with respect to
 the congruence subgroup `G`.}
-    require Index(G) eq 1 : "Only implemented for level = (1).";
-    return HilbertSeriesVasquez(BaseField(G));
+    if (NarrowClassNumber(F) eq 1) and (Norm(level) eq 1) then
+        return HilbertSeriesVasquez(F);
+    end if;
+    M := GradedRingOfHMFs(F, 0);
+    M2 := HMFSpace(M, level, [2,2]);
+    HC := HilbertSeriesCusp(M, level);
+    R<T> := Parent(HC);
+    HE := EisensteinDimension(M2)*T^2/(1-T^2);
+    H := HC + HE + NarrowClassNumber(M);
+    return H;
+end intrinsic;
+
+
+intrinsic HilbertSeriesCusp(F::FldNum, level::RngOrdIdl : prec:=false) -> FldFunRatUElt
+{Return the Hilbert series for the space of cusp Hilbert Modular Forms of weight `k` with respect to
+the congruence subgroup `G`.}
+    M := GradedRingOfHMFs(F, 0);
+    return HilbertSeriesCusp(M, level : prec:=prec);
 end intrinsic;
 
 
