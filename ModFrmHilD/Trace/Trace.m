@@ -573,7 +573,8 @@ intrinsic PrecompEmbeddingNumberOverUnitIndex(M::ModFrmHilDGRng, data::SeqEnum, 
   // Conductor Sum
   conductorsum := 0;
   for bb in Divisors( ideal< ZF | ff * aa^(-1) > ) do
-    term := Norm(bb) * (&*([1] cat [1 - LocalSquare(M,D,pp[1]) * Norm(pp[1])^(-1) : pp in Factorization(bb) | Valuation(DD,pp[1]) eq 0 ])); // Artin symbol = ( LocalSquare(M,D,pp[1]) ) + (Valuation(DD,pp[1]) eq 0) code
+    // Artin symbol = ( LocalSquare(M,D,pp[1]) ) + (Valuation(DD,pp[1]) eq 0) code
+    term := Norm(bb) * (&*([1] cat [1 - LocalSquare(M,D,pp[1]) * Norm(pp[1])^(-1) : pp in Factorization(bb) | Valuation(DD,pp[1]) eq 0 ]));
     // Embedding numbers
     for pair in NNfact do
       pp, e := Explode(pair);
@@ -768,7 +769,7 @@ end intrinsic;
 //                                               //
 ///////////////////////////////////////////////////
 
-intrinsic ClassNumberandUnitIndex(ZF::RngOrd, D::RngOrdElt, hplus::RngIntElt) -> Any
+intrinsic ClassNumberandUnitIndex(ZF::RngOrd, d::RngOrdElt, hplus::RngIntElt) -> Any
   {Returns the class number and the unit index 2[Z_K^* : Z_F^*] = #mu_K [Z_K^* : mu_K Z_F^*]}
   /* This takes as input
         - K/F = a number field defined as a degree 2 extension of a totally real field F
@@ -779,13 +780,10 @@ intrinsic ClassNumberandUnitIndex(ZF::RngOrd, D::RngOrdElt, hplus::RngIntElt) ->
 
 
   // Preliminaries //
-  K := ext<NumberField(ZF) | Polynomial([-D,0,1]) >; // Field K/F x^2 - D
-  DD := Discriminant(Integers(K)); // Discriminant
+  K := ext<NumberField(ZF) | Polynomial([-d,0,1]) >; // Field K/F x^2 - d
   // Magma requires absolute extensions for class number and units
   Kabs := AbsoluteField(K);
 
-  // Class group
-  h := ClassNumber(Kabs);
 
   // Roots of unity
   mu_K, mapmu_K := TorsionUnitGroup(Kabs); // roots of unity
@@ -802,7 +800,7 @@ intrinsic ClassNumberandUnitIndex(ZF::RngOrd, D::RngOrdElt, hplus::RngIntElt) ->
     // Now we set the element B
     twopower := 2^Valuation(w,2);
     if twopower eq 2 then
-      B := D;
+      B := d;
     else
       // We now create a generator for mu_K(2) the 2-power roots of unity
       g := mu_K.1;
@@ -823,6 +821,12 @@ intrinsic ClassNumberandUnitIndex(ZF::RngOrd, D::RngOrdElt, hplus::RngIntElt) ->
       end if;
     end if;
   end if; //////////
+
+  // Class group
+  h := ClassNumber(Kabs);
+
+  // Discriminant
+  DD := Discriminant(Integers(K)); // Discriminant
 
   // return
   return h, unitindex, DD;

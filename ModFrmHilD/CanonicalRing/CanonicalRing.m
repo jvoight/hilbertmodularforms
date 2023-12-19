@@ -183,6 +183,7 @@ intrinsic ConstructGeneratorsAndRelations(
   IdealClassesSupport:=false,
   Symmetric:=false,
   ComputeNewGenerators:=true,
+  NumberOfTraceForms := 0,
   PrecomputedGens:=AssociativeArray()
   ) -> Any
   {
@@ -215,6 +216,18 @@ intrinsic ConstructGeneratorsAndRelations(
 
   have_dim_formula := IdealClassesSupport eq NarrowClassGroupReps(M) and not Symmetric;
   KnownRelations := false;
+
+  // Computing Trace forms 
+  F := BaseField(M);
+  bound := 500;
+  I := IdealsUpTo(bound, F);
+  while #I lt NumberOfTraceForms do
+    bound *:= 2;
+    I := IdealsUpTo(bound, F);
+  end while;
+  // Ideals
+  TraceFormIdeals := (NumberOfTraceForms eq 0) select [] else I[1..NumberOfTraceForms];
+  PrecomputeTraceForms(M, TraceFormIdeals);
 
   /////////////////////
   // Generators of lowest weight.
@@ -319,6 +332,7 @@ intrinsic ConstructGeneratorsAndRelations(
                                   Alg := Alg,
                                   KnownMkDimension := knownDim,
                                   IdealClassesSupport := IdealClassesSupport,
+                                  TraceFormIdeals := TraceFormIdeals,
                                   Symmetric := Symmetric);
 
       newGens := basisWeightk[#weightedSymBasis + 1 .. #basisWeightk];
@@ -349,6 +363,7 @@ intrinsic ExtendBasis(forms::SeqEnum[ModFrmHilDElt], Mk :
                       Alg                 := "Standard",
                       KnownMkDimension    := false,
                       IdealClassesSupport := false,
+                      TraceFormIdeals := [],
                       Symmetric     := false) -> SeqEnum
 {Given a sequence Q of r linearly independent elements of a space M and a subspace V of M
 containing the elements of Q, extend the elements of Q to a basis for U; the basis is
@@ -358,11 +373,13 @@ It is assumed that `forms` are linearly independent.}
     if KnownMkDimension cmpne false and KnownMkDimension eq #forms then
         return forms;
 
+    vprint HilbertModularForms : "Looking for generators in Eisenstein / Traceforms";
     elif KnownMkDimension cmpne false and KnownMkDimension ne #forms then
         // First try our luck with just Eisenstein series. If that fails, use the fallback.
 
         eisensteinbasis := EisensteinBasis(Mk : IdealClassesSupport:=IdealClassesSupport, Symmetric:=Symmetric);
-        moreforms := Basis(forms cat eisensteinbasis);
+        traceforms := [ TraceForm(Mk,aa) : aa in TraceFormIdeals ];
+        moreforms := Basis(forms cat eisensteinbasis cat traceforms );
         coeffs_matrix := CoefficientsMatrix(moreforms : IdealClasses:=IdealClassesSupport);
 
         // TODO: This double complement call can surely be optimized away.
@@ -371,6 +388,7 @@ It is assumed that `forms` are linearly independent.}
         end if;
     end if;
 
+    vprint HilbertModularForms : "Opening Basis! This may be slow";
     // Apply the fallback strategy.
     Basisweightk := Basis(Mk : IdealClassesSupport:=IdealClassesSupport, Symmetric:=Symmetric);
     return forms cat ComplementBasis(forms, Basisweightk: Alg := Alg);
