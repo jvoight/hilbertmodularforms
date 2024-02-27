@@ -47,7 +47,7 @@ intrinsic ExtendMultiplicatively(~coeffs::Assoc, N::RngOrdIdl, k::SeqEnum[RngInt
   // extend multiplicatively
   for n in ideals do
     if not IsDefined(coeffs, n) then
-      coeffs[n] := &*[coeffs[pair[1]^pair[2]] : pair in factorization(n)];
+      coeffs[n] := StrongMultiply([* coeffs[pair[1]^pair[2]] : pair in factorization(n) *]);
     end if;
   end for;
 end intrinsic;
@@ -81,12 +81,10 @@ intrinsic CuspFormFromEigenvalues(
   // TODO abhijitm once Jean's improvements are in, this construction
   // should be rewritten
   coeffs_by_nu := AssociativeArray();
-  coeff_rings := AssociativeArray();
   
   for bb in NarrowClassGroupReps(M) do
     coeffs_by_nu[bb] := AssociativeArray();
     coeffs_by_nu[bb][F!0] := coeff_ring!0;
-    coeff_rings[bb] := coeff_ring;
   end for;
 
   ideals := Exclude(Ideals(M), ideal<Integers(F) | 0>);
@@ -95,8 +93,8 @@ intrinsic CuspFormFromEigenvalues(
     a_nn := coeffs_by_nn[nn];
     bb := IdealToNarrowClassRep(M, nn);
     nu := IdealToRep(M)[bb][nn];
-    coeffs_by_nu[bb][nu] := IdlCoeffToEltCoeff(coeff_ring!a_nn, nu, Weight(Mk), coeff_ring);
+    coeffs_by_nu[bb][nu] := IdlCoeffToEltCoeff(a_nn, nu, Weight(Mk), coeff_ring);
   end for;
 
-  return HMF(Mk, coeffs_by_nu : coeff_rings := coeff_rings);
+  return HMF(Mk, coeffs_by_nu : coeff_ring := coeff_ring);
 end intrinsic;

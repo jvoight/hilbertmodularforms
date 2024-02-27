@@ -5,8 +5,13 @@
 ///////////////////////////////////////////////////
 
 ///////////// ModFrmHilDElt: Hecke Operators ////////////////
-intrinsic HeckeOperator(f::ModFrmHilDElt, mm::RngOrdIdl) -> ModFrmHilDElt
-  {Returns T(mm)(f) for the character chi modulo the level of f}
+intrinsic HeckeOperator(f::ModFrmHilDElt, mm::RngOrdIdl : B:=false) -> ModFrmHilDElt
+  {
+    Returns T(mm)(f) for the character chi modulo the level of f.
+    The optional parameter B is a basis which can be used to increase
+    precision. If B is not provided, we attempt to use a basis of the
+    parent space if it's been computed.  
+  }
 
   Mk := Parent(f);
   M := Parent(Mk);
@@ -18,16 +23,15 @@ intrinsic HeckeOperator(f::ModFrmHilDElt, mm::RngOrdIdl) -> ModFrmHilDElt
   chi := Character(Mk);
   K := CoefficientRing(f);
 
-  R := GetHMFSerPuis(M, K);
   prec := Precision(f) div Norm(mm);
-  Tmmf_bbs := AssociativeArray();
+  coeffs := AssociativeArray();
 
   for bb in NarrowClassGroupReps(M) do
     bbp := NarrowClassGroupRepsToIdealDual(M)[bb];
     bbpinv := bbp^(-1);
+    coeffs[bb] := AssociativeArray();
 
-    Tmmf_bb_ser := RngSerPuisZero(R);
-    for nu in FunDomainRepsUpToNorm(M, bb, prec) do //they come sorted
+    for nu in FunDomainRepsUpToPrec(M, bb, prec) do
       nn := nu*bbpinv;  // already call nn the ideal for the Hecke operator
       c := 0;
 
@@ -37,23 +41,39 @@ intrinsic HeckeOperator(f::ModFrmHilDElt, mm::RngOrdIdl) -> ModFrmHilDElt
       for aa in Divisors(ZF!!(nn + mm)) do
         if nn eq 0*ZF then
           //takes care if the coefficients for the zero ideal are different
-          c +:= StrongMultiply(K, [* chi(aa), Norm(aa)^(k0 - 1), Coefficients(f)[NarrowClassRepresentative(M, bb*mm/aa^2)][ZF!0] *]);
+          c +:= StrongMultiply([* chi(aa), Norm(aa)^(k0 - 1), Coefficients(f)[NarrowClassRepresentative(M, bb*mm/aa^2)][ZF!0] *] : K:=K);
         else
           cf := Coefficient(f, ZF!!(aa^(-2) * nn * mm));
-          c +:= StrongMultiply(K, [* chi(aa), Norm(aa)^(k0 - 1), cf *]);
+          c +:= StrongMultiply([* chi(aa), Norm(aa)^(k0 - 1), cf *] : K:=K);
         end if;
       end for;
-      a_nu := IdlCoeffToEltCoeff(c, nu, k, CoefficientRing(Components(f)[bb])); 
-      Tmmf_bb_ser +:= RngSerPuisMonomial(R, nu, a_nu);
+      a_nu := IdlCoeffToEltCoeff(c, nu, k, K);
+      coeffs[bb][nu] := a_nu;
+      assert a_nu in K;
     end for;
-    Tmmf_bbs[bb] := Tmmf_bb_ser;
   end for;
 
-  g := HMF(Mk, Tmmf_bbs : prec:=prec);
+  g := HMF(Mk, coeffs : prec:=prec, coeff_ring := K);
 
   // Attempting to increase precision using a basis
-  if assigned Mk`Basis then
-    g := IncreasePrecisionWithBasis(g, Mk`Basis);
+  // TODO abhijitm should probably improve this code
+  basis := false;
+  if B cmpne false then
+    // if a basis is given, we assume that it's
+    // Hecke stable
+    basis := B;
+  elif assigned Mk`CuspFormBasis then
+    // if f is a cusp form
+    if #LinearDependence(Append(Mk`CuspFormBasis, f)) eq 1 then
+      basis := Mk`CuspFormBasis;
+    end if;
+  elif assigned Mk`Basis then
+    basis := Mk`Basis;
+  end if;
+
+  // if there's a basis to increase precision with
+  if basis cmpne false then
+    g := IncreasePrecisionWithBasis(g, basis);
   end if;
   
   return g;
@@ -80,14 +100,13 @@ intrinsic Eigenbasis(M::ModFrmHilD, basis::SeqEnum[ModFrmHilDElt] : P := 60) -> 
       A sequence of HMFs which are an eigenbasis for the Hecke operators of primes
       up to P. The forms are normalized where possible.
   }
-  
   MGRng := Parent(M);
-  F := MGRng`BaseField;
+  N := Level(M);
+  F := BaseField(MGRng);
   ZF := Integers(F);
-  dd := Different(ZF);
   hecke_matrices := [];
 
-  for pp in PrimesUpTo(P, F) do
+  for pp in PrimesUpTo(P, F : coprime_to:=N) do
     Append(~hecke_matrices, HeckeMatrix(basis, pp));
   end for;
 
@@ -100,6 +119,22 @@ intrinsic Eigenbasis(M::ModFrmHilD, basis::SeqEnum[ModFrmHilDElt] : P := 60) -> 
   _, B := Diagonalization(hecke_matrices);
   Binv := B^-1;
 
+  // coefficient ring of eigenforms
+  L := Parent(B[1][1]);
+  if F eq Rationals() then
+    K := L;
+  elif L eq Rationals() then
+    K := F;
+  elif IsSubfield(F, L) then
+    K := L;
+  elif IsSubfield(L, F) then
+    K := F;
+  else
+    K := Compositum(F, L);
+  end if;
+   
+  basis := [ChangeCoefficientRing(f, K) : f in basis];
+  K := CoefficientRing(basis[1]);
   eigs := [];
 
   // the columns of P should be the coefficients
@@ -107,21 +142,16 @@ intrinsic Eigenbasis(M::ModFrmHilD, basis::SeqEnum[ModFrmHilDElt] : P := 60) -> 
   // rise to eigenvectors
   // TODO is there really no way to get the columns of an AlgMatElt? 
   for v in Rows(Transpose(Binv)) do
-    Append(~eigs, &+[v[i] * basis[i] : i in [1 .. #basis]]);
-  end for;
-
-  frob_traces := AssociativeArray();
-  for eig in eigs do
-    frob_traces[eig] := AssociativeArray(); 
-    bb_1 := NarrowClassRepresentative(MGRng, dd);
-    a_1 := Coefficients(eig)[bb_1][MGRng`IdealToRep[bb_1][ideal<ZF|1>]];
-
-    for nn in IdealsUpTo(P, F) do
-      bb := NarrowClassRepresentative(MGRng, nn^-1 * dd);
-      frob_traces[eig][nn] := Coefficients(eig)[bb][MGRng`IdealToRep[bb][nn]] / a_1;
+    eig := &+[StrongCoerce(K, v[i]) * basis[i] : i in [1 .. #basis]];
+    for nn in IdealsUpTo(Norm(N), F) do
+      if not IsZero(Coefficient(eig, nn)) then
+        first_nonzero_a_nn := Coefficient(eig, nn);
+        break;
+      end if;
     end for;
+    Append(~eigs, eig / first_nonzero_a_nn);
   end for;
-  return eigs, frob_traces;
+  return eigs;
 end intrinsic;
 
 intrinsic HeckeMatrix(basis::SeqEnum[ModFrmHilDElt], nn::RngOrdIdl) -> Mtrx
@@ -141,7 +171,7 @@ intrinsic HeckeMatrix(basis::SeqEnum[ModFrmHilDElt], nn::RngOrdIdl) -> Mtrx
   for f in basis do
     g := HeckeOperator(f, nn);
     lindep := LinearDependence(basis cat [g]);
-    require #lindep eq 1 : "Try increasing precision";
+    require #lindep eq 1 : "Try increasing precision, #lindep was", #lindep;
     lindep := lindep[1];
     // We will transpose at the end. 
     // For now, each row stores the

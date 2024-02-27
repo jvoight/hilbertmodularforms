@@ -57,9 +57,10 @@ intrinsic CoefficientsMatrix(list::SeqEnum[ModFrmHilDElt] : IdealClasses:=false,
     prec := Min([Precision(Components(f)[bb]): f in list, bb in bbs]);
   end if;
 
-  nus := [FunDomainRepsUpToNorm(M)[bb][prec] : bb in bbs];
+  nus := [FunDomainRepsUpToPrec(M, bb, prec) : bb in bbs];
 
-  mat := Matrix([&cat[[Coefficient(Components(f)[bb], nu) : nu in nus[i]] : i->bb in bbs] : f in list]);
+  mat := Matrix([&cat[[Coefficient(Components(f)[bb], nu : InFunDomain := true)
+                       : nu in nus[i]] : i->bb in bbs] : f in list]);
   assert Ncols(mat) eq &+[#elt : elt in nus];
   assert Nrows(mat) eq #list;
   return mat, nus, bbs;
@@ -112,14 +113,32 @@ end intrinsic;
 intrinsic Basis(generators::SeqEnum[ModFrmHilDElt]) -> SeqEnum[ModFrmHilDElt]
   {returns Basis for the vector space spanned by the inputted forms}
   if #generators eq 0 then return generators; end if;
-  C, nus, bbs := CoefficientsMatrix(generators);
+  M := GradedRing(generators[1]);
+  bbs := NarrowClassGroupReps(M);
+  prec := Min([Precision(Components(f)[bb]): f in generators, bb in bbs]);
+  C, nus, bbs := CoefficientsMatrix(generators : prec:=prec);
   E := EchelonForm(C);
   r := Rank(E);
   Mk := Parent(generators[1]);
-  return [Mk | HMF(Mk, Eltseq(row), nus, bbs) : row in Rows(E)[1..r] ];
+  return [Mk | HMF(Mk, Eltseq(row), nus, bbs : prec:=prec) : row in Rows(E)[1..r] ];
 end intrinsic;
 
+intrinsic Intersection(V::SeqEnum[ModFrmHilDElt], W::SeqEnum[ModFrmHilDElt]) -> SeqEnum[ModFrmHilDElt]
+  {}
+  // assumes that V and W are actually bases, but doesn't check this 
+  // to avoid a slowdown. TODO abhijitm can probably handle better
+  if #V eq 0 or #W eq 0 then
+    return [];
+  end if;
 
+  lindep := LinearDependence(V cat W);
+  intersection := [];
+  for v in lindep do
+    f := Normalize(&+[v[i]*V[i] : i in [1 .. #V]]);
+    Append(~intersection, f);
+  end for;
+  return intersection;
+end intrinsic;
 
 
 intrinsic ComplementBasis(

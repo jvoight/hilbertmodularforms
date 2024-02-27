@@ -60,7 +60,7 @@ intrinsic CuspFormBasis(
   // Dirichlet restrictions, so that is also handled here.
   if not &and[x ge 2 : x in k] or not IsTrivial(DirichletRestriction(Character(Mk))) then
     if SaveAndLoad then
-      Mk`CuspFormBasis := LoadOrBuildAndSave(Mk, HeckeStabilityCuspBasis, "_cusp");
+      Mk`CuspFormBasis := LoadOrBuildAndSave(Mk, HeckeStabilityCuspBasis, "_cusp_space");
     else
       Mk`CuspFormBasis := HeckeStabilityCuspBasis(Mk : prove := false);
     end if;
@@ -311,6 +311,46 @@ intrinsic OldEisensteinBasis(
     end for;
   end if;
   return SubBasis(Mk`OldEisensteinBasis, IdealClassesSupport, Symmetric);
+end intrinsic;
+
+intrinsic NewDihedralBasis(Mk::ModFrmHilD) -> SeqEnum[ModFrmHilDElt]
+  {Given a space of weight one forms, compute the subspace of dihedral forms.} 
+  
+  ans := [];
+  for psi in PossibleGrossenchars(Mk) do
+    Primitivize(psi);
+    Append(~ans, ThetaSeries(Mk, psi));
+  end for;
+  
+  return (#ans eq 0) select ans else Basis(ans);
+end intrinsic;
+
+intrinsic OldDihedralBasis(Mk::ModFrmHilD) -> SeqEnum[ModFrmHilDElt]
+  {}
+  M := Parent(Mk);
+  N := Level(Mk);
+  k := Weight(Mk);
+  chi := Character(Mk);
+
+  old_dihedrals := [];
+  divisors := [D : D in Divisors(N) | (D ne N) and (D subset Conductor(chi))];
+  for D in divisors do
+    chi_D := Restrict(chi, D, [1,2]);
+    Mk_D := HMFSpace(M, D, k, chi_D);
+    old_dihedrals cat:= &cat[Inclusion(f, Mk) : f in NewDihedralBasis(Mk_D)];
+  end for;
+  return old_dihedrals;
+end intrinsic;
+
+intrinsic DihedralBasis(
+  Mk::ModFrmHilD
+  :
+  IdealClassesSupport:=false,
+  Symmetric:=false
+  ) -> SeqEnum[ModFrmHilDElt]
+  {returns a basis for the space of dihedral forms in Mk}
+  dihedral_basis := NewDihedralBasis(Mk) cat OldDihedralBasis(Mk);
+  return SubBasis(dihedral_basis, IdealClassesSupport, Symmetric);
 end intrinsic;
 
 intrinsic Basis(

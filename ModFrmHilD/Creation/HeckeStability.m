@@ -11,7 +11,7 @@ intrinsic HeckeStableSubspace(
     // because it is also Hecke stable
     TpV := [HeckeOperator(f, pp) : f in V];
     lindep := LinearDependence(TpV);
-    Tp_kernel := [&+[vec[i]*V[i] : i in [1 .. #V]] : vec in lindep];
+    Tp_kernel := [Normalize(&+[vec[i]*V[i] : i in [1 .. #V]]) : vec in lindep];
 
     // removing the kernel before entering the
     // iterative intersection loop
@@ -22,8 +22,8 @@ intrinsic HeckeStableSubspace(
     for _ in [1 .. #V] do
         vprintf HilbertModularForms:  "Current dim = %o\n", dimprev;
         TpVprev := [HeckeOperator(g, pp) : g in Vprev];
-        lindep := LinearDependence(Vprev cat TpVprev);
-        dimnew := #lindep;
+        Vnew := Intersection(Vprev, Basis(TpVprev));
+        dimnew := #Vnew;
 
         vprintf HilbertModularForms: "New dim = %o\n", dimnew;
 
@@ -32,26 +32,6 @@ intrinsic HeckeStableSubspace(
         end if;
 
         require dimnew le dimprev: "Something went wrong, probably need to increase precision.";
-
-        Vnew := [];
-        for vec in lindep do
-            f := &+[vec[i]*Vprev[i] : i in [1 .. #Vprev]];
-            M := CoefficientsMatrix([f]);
-            // TODO abhijitm should do something like this in general too,
-            // but clearing denominators seems annoying over number fields.
-            if Parent(M[1][1]) eq Rationals() then
-              d := Denominator(M);
-              M := Matrix(Integers(),d*M);
-              gcd_M := GCD(Eltseq(M));
-              // If the generalization of Schaeffer's theorem to HMFs is true,
-              // then this can never happen
-              require gcd_M ne 0 : "We didn't think this could happen -- you may have found\
-                      an interesting example! Please email TODO.";
-              Append(~Vnew, f/gcd_M);
-            else
-              Append(~Vnew, f);
-            end if;
-        end for;
 
         // If the iterative intersection process has stabilized,
         // then exit the loop.
@@ -71,10 +51,19 @@ end intrinsic;
 intrinsic HeckeStabilityCuspBasis(
     Mk::ModFrmHilD
     :
-    prove := true
+    prove:=true,
+    stable_only:=false,
+    smallest_prime:=true
     ) -> SeqEnum[ModFrmHilDElt]
-    {Compute the space Mk using the Hecke stability method.
-        - The optional parameter prove is true or false. If true, we verify that we had enough precision to check the equality of the potentially meromorphic form with a holomorphic one.
+    {
+      Compute the space Mk using the Hecke stability method.
+        - The optional parameter prove is true or false.
+          If true, we verify that we had enough precision to check the 
+          equality of the potentially meromorphic form with a holomorphic one.
+        - The optional parameter stable_only is true or false.
+          If true, we return the Hecke stable subspace we find without 
+          raising it to a dth power to ensure that the forms we found 
+          are genuinely holomorphic.
     }
 
     M := Parent(Mk);
@@ -121,6 +110,7 @@ intrinsic HeckeStabilityCuspBasis(
     vprintf HilbertModularForms: "Computing basis of cusp forms of weight %o, level %o\n", [k[i] + eis_k : i in [1 .. n]], N;
     Mkl := HMFSpace(M, N, [k[i] + eis_k : i in [1 .. n]]);
     Bkl := CuspFormBasis(Mkl);
+    
     vprintf HilbertModularForms: "Size of basis is %o.\n", #Bkl;
 
     require #Bkl eq CuspDimension(Mkl) : "Need to increase precision to compute this space";
@@ -134,14 +124,18 @@ intrinsic HeckeStabilityCuspBasis(
     //Our initial candidate for our desired space.
     V := [f/Eis : f in Bkl];
 
-    // We want to choose the prime pp of smallest norm among
-    // the primes not dividing N
-    bound := 20;
-    primes := PrimesUpTo(bound, F:coprime_to := N);
-    // if N divides every prime of norm up to 20, which seems
-    // unlikely, but just in case
-    if #primes eq 0 then
-        primes := PrimesUpTo(Norm(N), F:coprime_to := N)[1];
+    if not smallest_prime then
+      // We want to choose the prime pp of smallest norm among
+      // the primes not dividing N
+      bound := 20;
+      primes := PrimesUpTo(bound, F:coprime_to := N);
+      // if N divides every prime of norm up to 20, which seems
+      // unlikely, but just in case
+      if #primes eq 0 then
+          primes := PrimesUpTo(Norm(N), F:coprime_to := N)[1];
+      end if;
+    else
+      primes := PrimesUpTo(2^Degree(F), F);
     end if;
     pp := primes[1];
 
@@ -149,7 +143,7 @@ intrinsic HeckeStabilityCuspBasis(
 
     V := HeckeStableSubspace(V, ZF!!pp);
 
-    if #V eq 0 then
+    if #V eq 0 or stable_only then
         return V;
     end if;
 
@@ -180,16 +174,18 @@ intrinsic HeckeStabilityCuspBasis(
     if done then
         vprintf HilbertModularForms: "Found a Hecke stable subspace!\n";
 
-        // We should now remove any Eisenstein series that ended up in this space
-        // so that we are left with only cusp forms
-        eigs := Eigenbasis(Mk, V);
-        V := [];
-        for eig in eigs do
-          // if eig^2 is a cusp form in the upstairs space,
-          if #LinearDependence(Append(Bcusp, eig^d)) ne 0 then
-            Append(~V, eig);
-          end if;
-        end for;
+        if IsParallel(k) then
+          // We should now remove any Eisenstein series that ended up in this space
+          // so that we are left with only cusp forms
+          eigs := Eigenbasis(Mk, V);
+          V := [];
+          for eig in eigs do
+            // if eig^2 is a cusp form in the upstairs space,
+            if #LinearDependence(Append(Bcusp, eig^d)) ne 0 then
+              Append(~V, eig);
+            end if;
+          end for;
+        end if;
 
         if prove then
             vprintf HilbertModularForms: "Need to verify that the precision is large enough to compute the space larger space\n";

@@ -69,7 +69,7 @@ test(M, k, correct);
 
 k := [2,4];
 K := UnitCharField(F, k);
-auts := AutsReppingEmbeddingsOfF(F, k);
+auts := AutsOfUCFReppingEmbeddingsOfF(F, k);
 
 // eps_1^(k_1/2) * eps_2^(k_2/2) = eps_1 * eps_2^2 = N(eps) * eps_2
 // If [sigma_1, sigma_2] is the output of EmbeddingsIntoUnitCharField and
@@ -92,7 +92,7 @@ K := UnitCharField(F, k);
 // The coefficient we store should thus be the positive square root
 // of eps_1. eps = mu^2 for mu = +/- (1-sqrt(5))/2 (under v_1, say).
 // We want the one which is positive under v_1, so -(1-sqrt(5))/2.
-v_0 := DistinguishedPlace(K);
+v_0 := MarkedEmbedding(K);
 correct[bb][eps] := K!(ZF.2-1);
 test(M, k, correct : level:=N, chi:=chi);
 
