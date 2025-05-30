@@ -171,7 +171,8 @@ end function;
 
 intrinsic HeckeCharWeightFromWeight(K::Fld, F::Fld, k::SeqEnum[RngIntElt]) -> SeqEnum[Tup] 
   {}
-  if IsParallel(k) then
+  // in parallel weight 1, the infinity type is trivial
+  if IsParallel(k) and (k[1] eq 1) then
     r, s := Signature(K);
     return [<0, 0> : _ in [1 .. r+s]];
   else
@@ -225,15 +226,15 @@ intrinsic PossibleGrossencharsOfRelQuadExt(K, N, k_hmf, chi) -> List
     S := HMFGrossencharsTorsorSet(X);
   end if;
 
-  GF, mF := RayClassGroup(N, [1,2]);
+  GK, mK := RayClassGroup(N, [1 .. Degree(BaseField(K))]);
   ans := [* *];
   for psi in S do
     N_psi := ZK!!(Conductor(psi));
     if Norm(N_psi) * rel_disc eq N then
       flag := true;
-      for g in Generators(GF) do
-        I := mF(g);
-        flag and:= StrongEquality(chi(I) * Norm(I)^(Max(k_hmf) - 1), psi(Integers(K_abs)!!(I))^-1 * QuadraticCharacter(I^-1, K));
+      for g in Generators(GK) do
+        I := mK(g);
+        flag and:= StrongEquality(chi(I) * Norm(I)^(Max(k_hmf) - 1), psi(Integers(K_abs)!!(I)) * QuadraticCharacter(I, K));
       end for;
       if flag then
         Append(~ans, psi);
@@ -289,9 +290,9 @@ intrinsic ThetaSeries(Mk::ModFrmHilD, psi::HMFGrossenchar) -> ModFrmHilDElt
     g := #fact;
     d := InertiaDegree(pp);
     if g eq 2 then
-      a_pps[pp] := StrongAdd([* psi(fact[1][1])^-1, psi(fact[2][1])^-1 *]);
+      a_pps[pp] := StrongAdd([* psi(fact[1][1]), psi(fact[2][1]) *]);
     elif fact[1][2] ne 1 then
-      a_pps[pp] := psi(fact[1][1])^-1;
+      a_pps[pp] := psi(fact[1][1]);
     else
       a_pps[pp] := 0;
     end if;

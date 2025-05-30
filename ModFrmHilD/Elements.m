@@ -234,6 +234,15 @@ intrinsic ChangeCoefficientRing(f::ModFrmHilDElt, R::Rng) -> ModFrmHilDElt
   return HMFSumComponents(Parent(f), components);
 end intrinsic;
 
+intrinsic CanChangeRing(f::ModFrmHilDElt, R::Rng) -> BoolElt, ModFrmHilDElt
+  {}
+  try
+    return true, ChangeCoefficientRing(f, R);
+  catch e
+    return false, _;
+  end try;
+end intrinsic;
+
 intrinsic IsCoercible(Mk::ModFrmHilD, f::.) -> BoolElt, .
 {}
     if Type(f) eq RngIntElt then
@@ -291,10 +300,19 @@ end intrinsic;
 
 intrinsic Trace(f::ModFrmHilDElt) -> ModFrmHilDElt
   {return Trace(f)}
-  C := Components(f);
   nC := AssociativeArray();
-  for bb in Keys(C) do
-    nC[bb] := Trace(C[bb]);
+  for bb->fbb in Components(f) do
+    nC[bb] := Trace(fbb);
+  end for;
+  return HMFSumComponents(Parent(f), nC);
+end intrinsic;
+
+
+intrinsic Derivative(f::ModFrmHilDElt, i::RngIntElt) -> ModFrmHilDElt
+  {Returns the derivative with the respect to the ith coordinate}
+  nC := AssociativeArray();
+  for bb->fbb in Components(f) do
+    nC[bb] := Derivative(fbb, i);
   end for;
   return HMFSumComponents(Parent(f), nC);
 end intrinsic;

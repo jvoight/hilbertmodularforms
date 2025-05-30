@@ -14,7 +14,7 @@ declare attributes ModFrmHilD:
   Basis, // = EisensteinBasis cat CuspFormBasis SeqEnum[ModFrmHilDElt]
   Character, // GrpHeckeElt, JV: why aren't we using Dirichlet?
   UnitCharacters, // Assoc: unit[bb] = omega
-                 // Type(omega) = GrpCharUnitTotElt: TotallyPositiveUnits(Parent(Parent)) -> CoefficientRing
+                 // Type(omega) = GrpCharUnitTotElt: TotallyPositiveUnitsGroup(Parent(Parent)) -> CoefficientRing
   EisensteinBasis, // SeqEnum[ModFrmHilDElt]
   CuspFormBasis, // SeqEnum[ModFrmHilDElt]
   EllipticBasis, // SeqEnum[ModFrmHilDElt]
@@ -423,16 +423,6 @@ intrinsic CuspDimension(Mk::ModFrmHilD : version:="trace") -> RngIntElt
     version := "builtin";
   end if;
 
-  // TODO abhijitm remove once trace formula officially
-  // supports higher degree fields
-  if Degree(BaseField(Mk)) gt 2 then
-    version := "builtin";
-  end if;
-  /*
-  if NarrowClassNumber(Parent(Mk)) ne 1 and not IsTrivial(Character(Mk)) then
-    version := "builtin";
-  end if;
-  */
   if not assigned Mk`CuspDimension then
     k := Weight(Mk);
     if version eq "builtin" then

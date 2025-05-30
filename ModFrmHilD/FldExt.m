@@ -1,6 +1,6 @@
 // save fundamental unit
 declare attributes FldAlg:
-  TotallyPositiveUnits,
+  TotallyPositiveUnitsGroup,
   TotallyPositiveUnitsMap,
   TotallyPositiveUnitsGenerators,
   TotallyPositiveUnitsGeneratorsOrients,
@@ -9,6 +9,7 @@ declare attributes FldAlg:
   MarkedEmbedding,
   Extensions,
   Restrictions,
+  MatrixRingHoms,
   UnitCharFieldsByWeight,
   MinDistBtwnRoots
   ;
@@ -63,10 +64,10 @@ intrinsic Signature(a::RngOrdElt) -> SeqEnum
   return Signature(FieldOfFractions(R)!a);
 end intrinsic;
 
-intrinsic TotallyPositiveUnits(F::FldAlg) -> GrpAb, Map
+intrinsic TotallyPositiveUnitsGroup(F::FldAlg) -> GrpAb, Map
   {return the group of totally positive units of the base as an abstract group and the map from abstract totally positive unit group into F^\times_>0}
 
-  if not assigned F`TotallyPositiveUnits or not assigned F`TotallyPositiveUnitsMap then
+  if not assigned F`TotallyPositiveUnitsGroup or not assigned F`TotallyPositiveUnitsMap then
     U, mp := UnitGroup(F);
     // Stupid function, the isomorphism mu_2 -> ZZ/2*ZZ
     hiota := function(u);
@@ -81,11 +82,11 @@ intrinsic TotallyPositiveUnits(F::FldAlg) -> GrpAb, Map
     UZd := AbelianGroup([2 : i in [1..Degree(F)]]);
     phi := hom<U -> UZd | [[hiota(Sign(Evaluate(mp(U.i), v))) : v in RealPlaces(F)] : i in [1..#Generators(U)]]>;
     K := Kernel(phi);
-    F`TotallyPositiveUnits := K;
+    F`TotallyPositiveUnitsGroup := K;
     F`TotallyPositiveUnitsMap := mp;
   end if;
 
-  return F`TotallyPositiveUnits, F`TotallyPositiveUnitsMap;
+  return F`TotallyPositiveUnitsGroup, F`TotallyPositiveUnitsMap;
 end intrinsic;
 
 intrinsic FundamentalUnit(F::FldNum) -> FldElt
@@ -117,8 +118,8 @@ intrinsic TotallyPositiveUnitsGenerators(F::FldNum) -> SeqEnum[RngOrdElt]
   end if;
 
   if not assigned F`TotallyPositiveUnitsGenerators then
-    PU, mPU := TotallyPositiveUnits(F);
-    tpugs_unorient := [Integers(F)!mPU(gen) : gen in Generators(PU)];
+    PU, mPU := TotallyPositiveUnitsGroup(F);
+    tpugs_unorient := [Integers(F)!mPU(PU.i) : i in [1 .. #Generators(PU)]];
 
     v := InfinitePlaces(F)[1];
     F`TotallyPositiveUnitsGenerators := [];
@@ -129,9 +130,9 @@ intrinsic TotallyPositiveUnitsGenerators(F::FldNum) -> SeqEnum[RngOrdElt]
     // consistent with the existing behavior of FundamentalUnitTotPos
     //
     // We keep track of which generators are inverted with respect to the 
-    // Generators(F`TotallyPositiveUnits) because we need to solve the word
+    // Generators(F`TotallyPositiveUnitsGroup) because we need to solve the word
     // problem in the unit generators code and it solves it there with respect
-    // to Generators(F`TotallyPositiveUnits).
+    // to Generators(F`TotallyPositiveUnitsGroup).
     for eps in tpugs_unorient do
       if Evaluate(eps, v) lt 1 then
         Append(~F`TotallyPositiveUnitsGenerators, eps);
@@ -148,7 +149,7 @@ end intrinsic;
 intrinsic TotallyPositiveUnitsGeneratorsOrients(F::FldNum) -> SeqEnum
   {
     Returns a sequence whose ith entry e is such that the 
-    ith element of SetToSequence(Generators(TotallyPositiveUnits)) is the
+    ith element of SetToSequence(Generators(TotallyPositiveUnitsGroup)) is the
     ith element of F`TotallyPositiveUnitsGenerators raised to the eth power.
 
     Here, e will either be 1 or -1. 
@@ -453,6 +454,60 @@ intrinsic StrongEquality(x::Any, y::Any : K:=false) -> BoolElt
   return StrongCoerce(K, x) eq StrongCoerce(K, y);
 end intrinsic;
 
+intrinsic StrongCoerceMatrix(L::Fld, M::AlgMatElt) -> Mtrx
+  {
+    Strong coerces the matrix M, defined over a base field K,
+    into the field L. 
+  }
+  R := Parent(M);
+  K := BaseRing(R);
+  require Type(K) in [FldRat, FldQuad, FldCyc, FldNum] : "M must be defined\
+    over a field of type FldRat, FldQuad, FldCyc, or FldNum.";
+
+  n := Nrows(M);
+  // if either K or L is FldRat then automatic coercion should work.
+  if K cmpeq Rationals() then
+    return MatrixRing(L, n)!M;
+  elif L cmpeq Rationals() then
+    return MatrixRing(L, n)!M;
+  end if;
+
+  if DefiningPolyCoeffs(K) cmpeq DefiningPolyCoeffs(L) then
+    return MatrixRing(L, n)!M;
+  end if;
+
+  if not assigned K`MatrixRingHoms then
+    // M`MatrixRingHoms maps <L, n>, for L a number field
+    // and n a positive integer, to a homomorphism from 
+    // the ring of nxn matrices over K to the same over L.
+    K`MatrixRingHoms := AssociativeArray();
+  end if;
+
+
+  S := MatrixRing(L, n);
+  L_poly := DefiningPolyCoeffs(L);
+  if IsSubfield(K, L) then
+    if not IsDefined(K`MatrixRingHoms, <L_poly, n>) then
+      // this is just to do the usual checks and assign the map
+      // K`Extensions[L_poly]
+      _ := StrongCoerce(L, K.1);
+      b, aut := IsDefined(K`Extensions, L_poly);
+      require b : "Something's gone wrong, this should be defined.";
+      phi := hom<K -> L | L!(K.1)>;
+      psi := aut * phi;
+      K`MatrixRingHoms[<L_poly, n>] := hom<R -> S | psi>;
+    end if;
+    return K`MatrixRingHoms[<L_poly, n>](M);
+  elif IsSubfield(L, K) then
+    // The MatrixRingHoms logic only goes one way, so we strong coerce
+    // the entries of the matrix individually if we are trying to 
+    // coerce into a smaller subfield.
+    
+    // this will throw an error if the elements of M are not all coercible into L.
+    return S![StrongCoerce(L, x) : x in Eltseq(M)];
+  end if;
+end intrinsic;
+
 intrinsic MinDistBtwnRoots(K::FldAlg) -> FldReElt
   {
     Returns the minimum absolute value distance between 
@@ -742,16 +797,18 @@ intrinsic DefiningPolyCoeffs(K::Fld) -> SeqEnum
 end intrinsic;
 
 intrinsic TraceBasis(aa::RngOrdFracIdl) -> SeqEnum
-  {Given a fractional ideal aa, returns a basis (a,b) in Smith normal form
-   where Trace(a) = n > 0 and Trace(b) = 0}
+  {Given a fractional ideal aa, returns a basis (a_1, ..., a_n) in Smith normal form
+   where Trace(a_1) > 0 and Trace(a_i) = 0 for i > 1. 
+   Further, Trace(a_j*ZF.j) > 0 and Trace(a_i*ZF.j) = 0 for all i > j.}
 
   // Preliminaries
   B := Basis(aa);
   ZF := Parent(B[2]);
+  // This also should be generalized appropriately when n > 2
   v := InfinitePlaces(NumberField(ZF))[2];
 
   // Change of basis
-  traces := Matrix([[Integers()!Trace(B[i])] : i in [1..#B]]);
+  traces := Matrix([[Integers()!Trace(B[i]*ZF.j) : j in [1..Degree(ZF)]] : i in [1..#B]]);
   _, Q := HermiteForm(traces);
 
   TB := Eltseq(Vector(B)*Transpose(ChangeRing(Q,ZF)));

@@ -228,6 +228,9 @@ intrinsic IsNonempty(X::HMFGrossencharsTorsor) -> BoolElt, GrpDrchNFElt
     if IsFiniteOrder(X) then
       X`IsNonempty := true;
       X`MarkedDrchChar := Dv.0;
+    elif &and[IsOne(EvaluateNoncompactInfinityType(X, eps)) : eps in UnitsGenerators(X`BaseField : exclude_torsion:=false)] then
+      X`IsNonempty := true;
+      X`MarkedDrchChar := Dv.0;
     else
       K := X`BaseField;
       E := (IsGalois(K)) select K else SplittingField(K);
@@ -369,7 +372,7 @@ end intrinsic;
 intrinsic IsFiniteOrder(X::HMFGrossencharsTorsor) -> BoolElt
   {}
   for tup in X`Weight do
-    if not IsZero(tup[1]) then
+    if not (IsZero(tup[1]) and IsZero(tup[2])) then
       return false;
     end if;
   end for;
@@ -421,8 +424,8 @@ intrinsic MarkedCharClassRepEvals(X::HMFGrossencharsTorsor) -> Assoc
       a := StrongMultiply([* EvaluateNoncompactInfinityType(X, x), X`MarkedDrchChar(x) *]);
       L := Parent(a);
       t := MaxPowerDividingD(a, d);
-      L := RadicalExtension(L, Integers()!(d/t), a);
-      X`MarkedCharClassRepEvals[rep] := Root(a, d)^-1;
+      L := AbsoluteField(RadicalExtension(L, Integers()!(d/t), Root(a,t)));
+      X`MarkedCharClassRepEvals[rep] := Root(L!a, d)^-1;
       Append(~reps, rep);
     end for;
   end if;
@@ -498,9 +501,9 @@ intrinsic '@'(I::RngOrdIdl, chi::HMFGrossenchar) -> FldElt
   end if;
 
   return StrongMultiply([*
-      chi_at_J,
-      EvaluateNoncompactInfinityType(X, x)^-1,
-      chi`DrchChar(X`BaseField!x)^-1 
+      chi_at_J^-1,
+      EvaluateNoncompactInfinityType(X, x),
+      chi`DrchChar(X`BaseField!x)
       *]);
 end intrinsic;
 

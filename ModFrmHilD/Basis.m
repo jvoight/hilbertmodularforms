@@ -65,11 +65,11 @@ intrinsic CuspFormBasis(
       Mk`CuspFormBasis := HeckeStabilityCuspBasis(Mk : prove := false);
     end if;
   else
-    ViaTraceForm and:= IsParallel(Weight(Mk)) and GaloisDescent and (k mod 2) eq 0;
+    ViaTraceForm and:= IsParallel(k) and GaloisDescent and (k[1] mod 2) eq 0;
     if ViaTraceForm then
       Mk`CuspFormBasis := CuspFormBasisViaTrace(Mk : IdealClassesSupport:=IdealClassesSupport);
     else
-      Mk`CuspFormBasis := NewCuspFormBasis(Mk : GaloisDescent:=GaloisDescent, SaveAndLoad:=SaveAndLoad) cat OldCuspFormBasis(Mk : GaloisDescent := GaloisDescent);
+      Mk`CuspFormBasis := NewCuspFormBasis(Mk : GaloisDescent:=GaloisDescent, SaveAndLoad:=SaveAndLoad) cat OldCuspFormBasis(Mk : GaloisDescent:=GaloisDescent, SaveAndLoad:=SaveAndLoad);
     end if;
     // The contents of Mk`CuspFormBasis should be a basis for the space of cuspforms
     require CuspDimension(Mk) eq #Mk`CuspFormBasis : Sprintf("CuspDimension(Mk) = %o != %o = #Mk`CuspFormBasis", CuspDimension(Mk), #Mk`CuspFormBasis);
@@ -99,7 +99,7 @@ intrinsic NewCuspFormBasis(
       Mk`NewCuspFormBasis := NewCuspForms(Mk : GaloisDescent := GaloisDescent);
     end if;
   end if;
-
+  
   return SubBasis(Mk`NewCuspFormBasis, IdealClassesSupport, Symmetric);
 end intrinsic;
 
@@ -116,7 +116,7 @@ intrinsic CuspFormBasisViaTrace(Mk::ModFrmHilD : IdealClassesSupport:=false, fai
   F := BaseField(Mk);
   ZF := Integers(F);
   C := NarrowClassGroupReps(M);
-  dim := CuspDimension(Mk); // Change this to : version := "trace" later
+  dim := CuspDimension(Mk : version := "trace"); // Change this to : version := "trace" later
   m,p := Conductor(chi);
   _, ii := Modulus(chi); // Modulus
 
@@ -127,6 +127,7 @@ intrinsic CuspFormBasisViaTrace(Mk::ModFrmHilD : IdealClassesSupport:=false, fai
   require (k[1] mod 2) eq 0: "Not implemented for odd weights";
 
   // Ideal bound 
+  // Eran: Why is this a fixed bound??
   bound := 500;
   Ideals := IdealsUpTo(bound, F); // Ideals for traceforms
 
@@ -173,9 +174,11 @@ intrinsic CuspFormBasisViaTrace(Mk::ModFrmHilD : IdealClassesSupport:=false, fai
     // Compute new ideal
     aa := Ideals[t];
     vprintf HilbertModularForms: "Computing %o new traceforms.\n Fail counter: %o\n Ideals: %o\n", d, fails, [ IdealOneLine(aa) : aa in aas];
+    /*
     vprintf HilbertModularForms: "PrecomputeTraceForms(M, aas)...";
     vtime HilbertModularForms:
     PrecomputeTraceForms(M, aas);
+    */
 
     // Check for linear dependence
     B cat:= [TraceForm(Mk,aa) : aa in aas];
@@ -201,7 +204,9 @@ intrinsic OldCuspFormBasis(
   :
   IdealClassesSupport := false,
   Symmetric := false,
-  GaloisDescent := true) -> SeqEnum[ModFrmHilDElt]
+  GaloisDescent := true,
+  SaveAndLoad := false
+  ) -> SeqEnum[ModFrmHilDElt]
   {
     input:
       Mk: A space of HMFs
@@ -221,7 +226,7 @@ intrinsic OldCuspFormBasis(
     divisors := Exclude(Divisors(N), N);
     for D in divisors do
       Mk_D := HMFSpace(M, D, k);
-      Mk`OldCuspFormBasis cat:= &cat[Inclusion(f, Mk) : f in NewCuspFormBasis(Mk_D : IdealClassesSupport := IdealClassesSupport, Symmetric := Symmetric, GaloisDescent := GaloisDescent)];
+      Mk`OldCuspFormBasis cat:= &cat[Inclusion(f, Mk) : f in NewCuspFormBasis(Mk_D : IdealClassesSupport:=IdealClassesSupport, Symmetric:=Symmetric, GaloisDescent:=GaloisDescent, SaveAndLoad:=SaveAndLoad)];
     end for;
   end if;
   return SubBasis(Mk`OldCuspFormBasis, IdealClassesSupport, Symmetric);
@@ -335,7 +340,7 @@ intrinsic OldDihedralBasis(Mk::ModFrmHilD) -> SeqEnum[ModFrmHilDElt]
   old_dihedrals := [];
   divisors := [D : D in Divisors(N) | (D ne N) and (D subset Conductor(chi))];
   for D in divisors do
-    chi_D := Restrict(chi, D, [1,2]);
+    chi_D := Restrict(chi, D, [1 .. Degree(BaseField(Mk))]);
     Mk_D := HMFSpace(M, D, k, chi_D);
     old_dihedrals cat:= &cat[Inclusion(f, Mk) : f in NewDihedralBasis(Mk_D)];
   end for;
